@@ -1,11 +1,19 @@
-// dllmain.cpp : Defines the entry point for the DLL application.
-#include "pch.h"
+#include "framework.h"
+
 #include <Shlobj.h>
 #include <filesystem>
 #include <set>
 #include <iostream>
 #include <map>
 #include <string_view>
+#include <cassert>
+
+HMODULE g_OrigDLL = nullptr;
+
+#define FUNC_LOAD(Name_) \
+     reinterpret_cast<uintptr_t>(GetProcAddress(g_OrigDLL, #Name_))
+
+extern "C" uintptr_t g_ImportFunctions[5] = { 0 };
 
 #define DEFINE_MESSAGE(Msg_) { Msg_, #Msg_ }
 
@@ -212,63 +220,21 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(0, nCode, wParam, lParam);
 }
 
-void Init();
-HMODULE g_VersionDLL = nullptr;
-
-#define FUNC_EXPORT(Name_, Return_, Arguments_, Parameters_) \
-    using Name_##_t = Return_(WINAPI*)Arguments_; \
-    Name_##_t g_##Name_ = nullptr; \
-    extern "C" Return_ WINAPI Name_ Arguments_ { \
-        if(!g_VersionDLL) Init(); \
-        return g_##Name_ Parameters_; \
-    }
-
-FUNC_EXPORT(GetFileVersionInfoA, BOOL, (LPCSTR lptstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (lptstrFilename, dwHandle, dwLen, lpData));
-FUNC_EXPORT(GetFileVersionInfoByHandle, int, (int hMem, LPCWSTR lpFileName, int v2, int v3), (hMem, lpFileName, v2, v3));
-FUNC_EXPORT(GetFileVersionInfoExA, BOOL, (DWORD dwFlags, LPCSTR lpwstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (dwFlags, lpwstrFilename, dwHandle, dwLen, lpData));
-FUNC_EXPORT(GetFileVersionInfoExW, BOOL, (DWORD dwFlags, LPCWSTR lpwstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (dwFlags, lpwstrFilename, dwHandle, dwLen, lpData));
-FUNC_EXPORT(GetFileVersionInfoSizeA, DWORD, (LPCSTR lptstrFilename, LPDWORD lpdwHandle), (lptstrFilename, lpdwHandle));
-FUNC_EXPORT(GetFileVersionInfoSizeExA, DWORD, (DWORD dwFlags, LPCSTR lpwstrFilename, LPDWORD lpdwHandle), (dwFlags, lpwstrFilename, lpdwHandle));
-FUNC_EXPORT(GetFileVersionInfoSizeExW, DWORD, (DWORD dwFlags, LPCWSTR lpwstrFilename, LPDWORD lpdwHandle), (dwFlags, lpwstrFilename, lpdwHandle));
-FUNC_EXPORT(GetFileVersionInfoSizeW, DWORD, (LPCWSTR lptstrFilename, LPDWORD lpdwHandle), (lptstrFilename, lpdwHandle));
-FUNC_EXPORT(GetFileVersionInfoW, BOOL, (LPCWSTR lptstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (lptstrFilename, dwHandle, dwLen, lpData));
-FUNC_EXPORT(VerFindFileA, DWORD, (DWORD uFlags, LPCSTR szFileName, LPCSTR szWinDir, LPCSTR szAppDir, LPSTR szCurDir, PUINT lpuCurDirLen, LPSTR szDestDir, PUINT lpuDestDirLen), (uFlags, szFileName, szWinDir, szAppDir, szCurDir, lpuCurDirLen, szDestDir, lpuDestDirLen));
-FUNC_EXPORT(VerFindFileW, DWORD, (DWORD uFlags, LPCWSTR szFileName, LPCWSTR szWinDir, LPCWSTR szAppDir, LPWSTR szCurDir, PUINT lpuCurDirLen, LPWSTR szDestDir, PUINT lpuDestDirLen), (uFlags, szFileName, szWinDir, szAppDir, szCurDir, lpuCurDirLen, szDestDir, lpuDestDirLen));
-FUNC_EXPORT(VerInstallFileA, DWORD, (DWORD uFlags, LPCSTR szSrcFileName, LPCSTR szDestFileName, LPCSTR szSrcDir, LPCSTR szDestDir, LPCSTR szCurDir, LPSTR szTmpFile, PUINT lpuTmpFileLen), (uFlags, szSrcFileName, szDestFileName, szSrcDir, szDestDir, szCurDir, szTmpFile, lpuTmpFileLen));
-FUNC_EXPORT(VerInstallFileW, DWORD, (DWORD uFlags, LPCWSTR szSrcFileName, LPCWSTR szDestFileName, LPCWSTR szSrcDir, LPCWSTR szDestDir, LPCWSTR szCurDir, LPWSTR szTmpFile, PUINT lpuTmpFileLen), (uFlags, szSrcFileName, szDestFileName, szSrcDir, szDestDir, szCurDir, szTmpFile, lpuTmpFileLen));
-FUNC_EXPORT(VerLanguageNameA, DWORD, (DWORD wLang, LPSTR szLang, DWORD cchLang), (wLang, szLang, cchLang));
-FUNC_EXPORT(VerLanguageNameW, DWORD, (DWORD wLang, LPWSTR szLang, DWORD cchLang), (wLang, szLang, cchLang));
-FUNC_EXPORT(VerQueryValueA, BOOL, (LPCVOID pBlock, LPCSTR lpSubBlock, LPVOID* lplpBuffer, PUINT puLen), (pBlock, lpSubBlock, lplpBuffer, puLen));
-FUNC_EXPORT(VerQueryValueW, BOOL, (LPCVOID pBlock, LPCWSTR lpSubBlock, LPVOID* lplpBuffer, PUINT puLen), (pBlock, lpSubBlock, lplpBuffer, puLen));
-
-#define FUNC_LOAD(Name_) \
-    g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_VersionDLL, #Name_));
-
-void Init()
+void Init(HMODULE hModule)
 {
-    PWSTR path;
-    SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
-    std::filesystem::path p(path);
-    p /= "version.dll";
-    g_VersionDLL = LoadLibraryW(p.wstring().c_str());
-    FUNC_LOAD(GetFileVersionInfoA);
-    FUNC_LOAD(GetFileVersionInfoByHandle);
-    FUNC_LOAD(GetFileVersionInfoExA);
-    FUNC_LOAD(GetFileVersionInfoExW);
-    FUNC_LOAD(GetFileVersionInfoSizeA);
-    FUNC_LOAD(GetFileVersionInfoSizeExA);
-    FUNC_LOAD(GetFileVersionInfoSizeExW);
-    FUNC_LOAD(GetFileVersionInfoSizeW);
-    FUNC_LOAD(GetFileVersionInfoW);
-    FUNC_LOAD(VerFindFileA);
-    FUNC_LOAD(VerFindFileW);
-    FUNC_LOAD(VerInstallFileA);
-    FUNC_LOAD(VerInstallFileW);
-    FUNC_LOAD(VerLanguageNameA);
-    FUNC_LOAD(VerLanguageNameW);
-    FUNC_LOAD(VerQueryValueA);
-    FUNC_LOAD(VerQueryValueW);
-    CoTaskMemFree(path);
+	g_Module = hModule;
+	PWSTR path;
+	SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
+	std::filesystem::path p(path);
+	p /= "msimg32.dll";
+	g_OrigDLL = LoadLibraryW(p.wstring().c_str());
+	assert(g_OrigDLL != nullptr);
+
+	g_ImportFunctions[0] = FUNC_LOAD(vSetDdrawflag);
+	g_ImportFunctions[1] = FUNC_LOAD(AlphaBlend);
+	g_ImportFunctions[2] = FUNC_LOAD(DllInitialize);
+	g_ImportFunctions[3] = FUNC_LOAD(GradientFill);
+	g_ImportFunctions[4] = FUNC_LOAD(TransparentBlt);
 
     if(!g_callWndProcHook)
         g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, g_Module, 0);
@@ -278,20 +244,25 @@ BOOL APIENTRY DllMain(HMODULE hModule,
                       DWORD  ul_reason_for_call,
                       LPVOID lpReserved)
 {
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
-        g_Module = hModule;
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-        break;
-    case DLL_PROCESS_DETACH:
-        if (g_VersionDLL)
-        {
-            FreeLibrary(g_VersionDLL);
-            g_VersionDLL = nullptr;
-        }
-        break;
-    }
+	static std::once_flag initFlag, cleanupFlag;
+
+	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
+		std::call_once(initFlag, [&] { Init(hModule); });
+	else if (ul_reason_for_call == DLL_PROCESS_DETACH)
+	{
+		std::call_once(cleanupFlag, [] {
+			if (g_OrigDLL)
+			{
+				FreeLibrary(g_OrigDLL);
+				g_OrigDLL = nullptr;
+			}
+			if (g_callWndProcHook)
+			{
+				UnhookWindowsHookEx(g_callWndProcHook);
+				g_callWndProcHook = nullptr;
+			}
+		});
+	}
+
     return TRUE;
 }
