@@ -1,0 +1,297 @@
+// dllmain.cpp : Defines the entry point for the DLL application.
+#include "pch.h"
+#include <Shlobj.h>
+#include <filesystem>
+#include <set>
+#include <iostream>
+#include <map>
+#include <string_view>
+
+#define DEFINE_MESSAGE(Msg_) { Msg_, #Msg_ }
+
+static const std::map<unsigned int, std::string_view> g_MessageMap {
+	DEFINE_MESSAGE(WM_CREATE),
+	DEFINE_MESSAGE(WM_DESTROY),
+	DEFINE_MESSAGE(WM_MOVE),
+	DEFINE_MESSAGE(WM_SIZE),
+	DEFINE_MESSAGE(WM_ACTIVATE),
+	DEFINE_MESSAGE(WM_SETFOCUS),
+	DEFINE_MESSAGE(WM_KILLFOCUS),
+	DEFINE_MESSAGE(WM_ENABLE),
+	DEFINE_MESSAGE(WM_SETREDRAW),
+	DEFINE_MESSAGE(WM_SETTEXT),
+	DEFINE_MESSAGE(WM_GETTEXT),
+	DEFINE_MESSAGE(WM_GETTEXTLENGTH),
+	DEFINE_MESSAGE(WM_PAINT),
+	DEFINE_MESSAGE(WM_CLOSE),
+	DEFINE_MESSAGE(WM_QUERYENDSESSION),
+	DEFINE_MESSAGE(WM_QUIT),
+	DEFINE_MESSAGE(WM_QUERYOPEN),
+	DEFINE_MESSAGE(WM_ERASEBKGND),
+	DEFINE_MESSAGE(WM_SYSCOLORCHANGE),
+	DEFINE_MESSAGE(WM_ENDSESSION),
+	DEFINE_MESSAGE(WM_SHOWWINDOW),
+	DEFINE_MESSAGE(WM_CTLCOLORMSGBOX),
+	DEFINE_MESSAGE(WM_CTLCOLOREDIT),
+	DEFINE_MESSAGE(WM_CTLCOLORLISTBOX),
+	DEFINE_MESSAGE(WM_CTLCOLORBTN),
+	DEFINE_MESSAGE(WM_CTLCOLORDLG),
+	DEFINE_MESSAGE(WM_CTLCOLORSCROLLBAR),
+	DEFINE_MESSAGE(WM_CTLCOLORSTATIC),
+	DEFINE_MESSAGE(WM_WININICHANGE),
+	DEFINE_MESSAGE(WM_SETTINGCHANGE),
+	DEFINE_MESSAGE(WM_DEVMODECHANGE),
+	DEFINE_MESSAGE(WM_ACTIVATEAPP),
+	DEFINE_MESSAGE(WM_FONTCHANGE),
+	DEFINE_MESSAGE(WM_TIMECHANGE),
+	DEFINE_MESSAGE(WM_CANCELMODE),
+	DEFINE_MESSAGE(WM_SETCURSOR),
+	DEFINE_MESSAGE(WM_MOUSEACTIVATE),
+	DEFINE_MESSAGE(WM_CHILDACTIVATE),
+	DEFINE_MESSAGE(WM_QUEUESYNC),
+	DEFINE_MESSAGE(WM_GETMINMAXINFO),
+	DEFINE_MESSAGE(WM_ICONERASEBKGND),
+	DEFINE_MESSAGE(WM_NEXTDLGCTL),
+	DEFINE_MESSAGE(WM_SPOOLERSTATUS),
+	DEFINE_MESSAGE(WM_DRAWITEM),
+	DEFINE_MESSAGE(WM_MEASUREITEM),
+	DEFINE_MESSAGE(WM_DELETEITEM),
+	DEFINE_MESSAGE(WM_VKEYTOITEM),
+	DEFINE_MESSAGE(WM_CHARTOITEM),
+	DEFINE_MESSAGE(WM_SETFONT),
+	DEFINE_MESSAGE(WM_GETFONT),
+	DEFINE_MESSAGE(WM_QUERYDRAGICON),
+	DEFINE_MESSAGE(WM_COMPAREITEM),
+	DEFINE_MESSAGE(WM_COMPACTING),
+	DEFINE_MESSAGE(WM_NCCREATE),
+	DEFINE_MESSAGE(WM_NCDESTROY),
+	DEFINE_MESSAGE(WM_NCCALCSIZE),
+	DEFINE_MESSAGE(WM_NCHITTEST),
+	DEFINE_MESSAGE(WM_NCPAINT),
+	DEFINE_MESSAGE(WM_NCACTIVATE),
+	DEFINE_MESSAGE(WM_GETDLGCODE),
+	DEFINE_MESSAGE(WM_NCMOUSEMOVE),
+	DEFINE_MESSAGE(WM_NCLBUTTONDOWN),
+	DEFINE_MESSAGE(WM_NCLBUTTONUP),
+	DEFINE_MESSAGE(WM_NCLBUTTONDBLCLK),
+	DEFINE_MESSAGE(WM_NCRBUTTONDOWN),
+	DEFINE_MESSAGE(WM_NCRBUTTONUP),
+	DEFINE_MESSAGE(WM_NCRBUTTONDBLCLK),
+	DEFINE_MESSAGE(WM_NCMBUTTONDOWN),
+	DEFINE_MESSAGE(WM_NCMBUTTONUP),
+	DEFINE_MESSAGE(WM_NCMBUTTONDBLCLK),
+	DEFINE_MESSAGE(WM_KEYDOWN),
+	DEFINE_MESSAGE(WM_KEYUP),
+	DEFINE_MESSAGE(WM_CHAR),
+	DEFINE_MESSAGE(WM_DEADCHAR),
+	DEFINE_MESSAGE(WM_SYSKEYDOWN),
+	DEFINE_MESSAGE(WM_SYSKEYUP),
+	DEFINE_MESSAGE(WM_SYSCHAR),
+	DEFINE_MESSAGE(WM_SYSDEADCHAR),
+	DEFINE_MESSAGE(WM_KEYLAST),
+	DEFINE_MESSAGE(WM_INITDIALOG),
+	DEFINE_MESSAGE(WM_COMMAND),
+	DEFINE_MESSAGE(WM_SYSCOMMAND),
+	DEFINE_MESSAGE(WM_TIMER),
+	DEFINE_MESSAGE(WM_HSCROLL),
+	DEFINE_MESSAGE(WM_VSCROLL),
+	DEFINE_MESSAGE(WM_INITMENU),
+	DEFINE_MESSAGE(WM_INITMENUPOPUP),
+	DEFINE_MESSAGE(WM_MENUSELECT),
+	DEFINE_MESSAGE(WM_MENUCHAR),
+	DEFINE_MESSAGE(WM_ENTERIDLE),
+	DEFINE_MESSAGE(WM_MOUSEWHEEL),
+	DEFINE_MESSAGE(WM_MOUSEMOVE),
+	DEFINE_MESSAGE(WM_LBUTTONDOWN),
+	DEFINE_MESSAGE(WM_LBUTTONUP),
+	DEFINE_MESSAGE(WM_LBUTTONDBLCLK),
+	DEFINE_MESSAGE(WM_RBUTTONDOWN),
+	DEFINE_MESSAGE(WM_RBUTTONUP),
+	DEFINE_MESSAGE(WM_RBUTTONDBLCLK),
+	DEFINE_MESSAGE(WM_MBUTTONDOWN),
+	DEFINE_MESSAGE(WM_MBUTTONUP),
+	DEFINE_MESSAGE(WM_MBUTTONDBLCLK),
+	DEFINE_MESSAGE(WM_PARENTNOTIFY),
+	DEFINE_MESSAGE(WM_MDICREATE),
+	DEFINE_MESSAGE(WM_MDIDESTROY),
+	DEFINE_MESSAGE(WM_MDIACTIVATE),
+	DEFINE_MESSAGE(WM_MDIRESTORE),
+	DEFINE_MESSAGE(WM_MDINEXT),
+	DEFINE_MESSAGE(WM_MDIMAXIMIZE),
+	DEFINE_MESSAGE(WM_MDITILE),
+	DEFINE_MESSAGE(WM_MDICASCADE),
+	DEFINE_MESSAGE(WM_MDIICONARRANGE),
+	DEFINE_MESSAGE(WM_MDIGETACTIVE),
+	DEFINE_MESSAGE(WM_MDISETMENU),
+	DEFINE_MESSAGE(WM_CUT),
+	DEFINE_MESSAGE(WM_COPYDATA),
+	DEFINE_MESSAGE(WM_COPY),
+	DEFINE_MESSAGE(WM_PASTE),
+	DEFINE_MESSAGE(WM_CLEAR),
+	DEFINE_MESSAGE(WM_UNDO),
+	DEFINE_MESSAGE(WM_RENDERFORMAT),
+	DEFINE_MESSAGE(WM_RENDERALLFORMATS),
+	DEFINE_MESSAGE(WM_DESTROYCLIPBOARD),
+	DEFINE_MESSAGE(WM_DRAWCLIPBOARD),
+	DEFINE_MESSAGE(WM_PAINTCLIPBOARD),
+	DEFINE_MESSAGE(WM_VSCROLLCLIPBOARD),
+	DEFINE_MESSAGE(WM_SIZECLIPBOARD),
+	DEFINE_MESSAGE(WM_ASKCBFORMATNAME),
+	DEFINE_MESSAGE(WM_CHANGECBCHAIN),
+	DEFINE_MESSAGE(WM_HSCROLLCLIPBOARD),
+	DEFINE_MESSAGE(WM_QUERYNEWPALETTE),
+	DEFINE_MESSAGE(WM_PALETTEISCHANGING),
+	DEFINE_MESSAGE(WM_PALETTECHANGED),
+	DEFINE_MESSAGE(WM_DROPFILES),
+	DEFINE_MESSAGE(WM_POWER),
+	DEFINE_MESSAGE(WM_WINDOWPOSCHANGED),
+	DEFINE_MESSAGE(WM_WINDOWPOSCHANGING),
+	// MFC specific messages
+	DEFINE_MESSAGE(WM_HELP),
+	DEFINE_MESSAGE(WM_NOTIFY),
+	DEFINE_MESSAGE(WM_CONTEXTMENU),
+	DEFINE_MESSAGE(WM_TCARD),
+	DEFINE_MESSAGE(WM_MDIREFRESHMENU),
+	DEFINE_MESSAGE(WM_MOVING),
+	DEFINE_MESSAGE(WM_STYLECHANGED),
+	DEFINE_MESSAGE(WM_STYLECHANGING),
+	DEFINE_MESSAGE(WM_SIZING),
+	DEFINE_MESSAGE(WM_SETHOTKEY),
+	DEFINE_MESSAGE(WM_PRINT),
+	DEFINE_MESSAGE(WM_PRINTCLIENT),
+	DEFINE_MESSAGE(WM_POWERBROADCAST),
+	DEFINE_MESSAGE(WM_HOTKEY),
+	DEFINE_MESSAGE(WM_GETICON),
+	DEFINE_MESSAGE(WM_EXITMENULOOP),
+	DEFINE_MESSAGE(WM_ENTERMENULOOP),
+	DEFINE_MESSAGE(WM_DISPLAYCHANGE),
+	DEFINE_MESSAGE(WM_STYLECHANGED),
+	DEFINE_MESSAGE(WM_STYLECHANGING),
+	DEFINE_MESSAGE(WM_GETICON),
+	DEFINE_MESSAGE(WM_SETICON),
+	DEFINE_MESSAGE(WM_SIZING),
+	DEFINE_MESSAGE(WM_MOVING),
+	DEFINE_MESSAGE(WM_CAPTURECHANGED),
+	DEFINE_MESSAGE(WM_DEVICECHANGE),
+	DEFINE_MESSAGE(WM_PRINT),
+	DEFINE_MESSAGE(WM_PRINTCLIENT)
+};
+
+std::string_view GetWndProcMessageName(UINT msg)
+{
+	thread_local std::string lastMsg;
+
+	auto it = g_MessageMap.find(msg);
+	if (it != g_MessageMap.end())
+		return it->second;
+	else
+	{
+		lastMsg = std::format("unknown<{}>", msg);
+		return lastMsg;
+	}
+}
+
+HMODULE g_Module;
+
+std::set<HWND> g_HookedHWNDs;
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    auto dbg = std::format("hwnd={} msg={}\n", (void*)hWnd, GetWndProcMessageName(msg));
+    OutputDebugStringA(dbg.c_str());
+
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
+HHOOK g_callWndProcHook = nullptr;
+LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
+    auto hwnd = ((CWPSTRUCT*)lParam)->hwnd;
+    if (nCode == HC_ACTION && hwnd && g_HookedHWNDs.count(hwnd) == 0) {
+        SetWindowSubclass(hwnd, WndProc, 0, 0);
+        g_HookedHWNDs.insert(hwnd);
+    }
+    return CallNextHookEx(0, nCode, wParam, lParam);
+}
+
+void Init();
+HMODULE g_VersionDLL = nullptr;
+
+#define FUNC_EXPORT(Name_, Return_, Arguments_, Parameters_) \
+    using Name_##_t = Return_(WINAPI*)Arguments_; \
+    Name_##_t g_##Name_ = nullptr; \
+    extern "C" Return_ WINAPI Name_ Arguments_ { \
+        if(!g_VersionDLL) Init(); \
+        return g_##Name_ Parameters_; \
+    }
+
+FUNC_EXPORT(GetFileVersionInfoA, BOOL, (LPCSTR lptstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (lptstrFilename, dwHandle, dwLen, lpData));
+FUNC_EXPORT(GetFileVersionInfoByHandle, int, (int hMem, LPCWSTR lpFileName, int v2, int v3), (hMem, lpFileName, v2, v3));
+FUNC_EXPORT(GetFileVersionInfoExA, BOOL, (DWORD dwFlags, LPCSTR lpwstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (dwFlags, lpwstrFilename, dwHandle, dwLen, lpData));
+FUNC_EXPORT(GetFileVersionInfoExW, BOOL, (DWORD dwFlags, LPCWSTR lpwstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (dwFlags, lpwstrFilename, dwHandle, dwLen, lpData));
+FUNC_EXPORT(GetFileVersionInfoSizeA, DWORD, (LPCSTR lptstrFilename, LPDWORD lpdwHandle), (lptstrFilename, lpdwHandle));
+FUNC_EXPORT(GetFileVersionInfoSizeExA, DWORD, (DWORD dwFlags, LPCSTR lpwstrFilename, LPDWORD lpdwHandle), (dwFlags, lpwstrFilename, lpdwHandle));
+FUNC_EXPORT(GetFileVersionInfoSizeExW, DWORD, (DWORD dwFlags, LPCWSTR lpwstrFilename, LPDWORD lpdwHandle), (dwFlags, lpwstrFilename, lpdwHandle));
+FUNC_EXPORT(GetFileVersionInfoSizeW, DWORD, (LPCWSTR lptstrFilename, LPDWORD lpdwHandle), (lptstrFilename, lpdwHandle));
+FUNC_EXPORT(GetFileVersionInfoW, BOOL, (LPCWSTR lptstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData), (lptstrFilename, dwHandle, dwLen, lpData));
+FUNC_EXPORT(VerFindFileA, DWORD, (DWORD uFlags, LPCSTR szFileName, LPCSTR szWinDir, LPCSTR szAppDir, LPSTR szCurDir, PUINT lpuCurDirLen, LPSTR szDestDir, PUINT lpuDestDirLen), (uFlags, szFileName, szWinDir, szAppDir, szCurDir, lpuCurDirLen, szDestDir, lpuDestDirLen));
+FUNC_EXPORT(VerFindFileW, DWORD, (DWORD uFlags, LPCWSTR szFileName, LPCWSTR szWinDir, LPCWSTR szAppDir, LPWSTR szCurDir, PUINT lpuCurDirLen, LPWSTR szDestDir, PUINT lpuDestDirLen), (uFlags, szFileName, szWinDir, szAppDir, szCurDir, lpuCurDirLen, szDestDir, lpuDestDirLen));
+FUNC_EXPORT(VerInstallFileA, DWORD, (DWORD uFlags, LPCSTR szSrcFileName, LPCSTR szDestFileName, LPCSTR szSrcDir, LPCSTR szDestDir, LPCSTR szCurDir, LPSTR szTmpFile, PUINT lpuTmpFileLen), (uFlags, szSrcFileName, szDestFileName, szSrcDir, szDestDir, szCurDir, szTmpFile, lpuTmpFileLen));
+FUNC_EXPORT(VerInstallFileW, DWORD, (DWORD uFlags, LPCWSTR szSrcFileName, LPCWSTR szDestFileName, LPCWSTR szSrcDir, LPCWSTR szDestDir, LPCWSTR szCurDir, LPWSTR szTmpFile, PUINT lpuTmpFileLen), (uFlags, szSrcFileName, szDestFileName, szSrcDir, szDestDir, szCurDir, szTmpFile, lpuTmpFileLen));
+FUNC_EXPORT(VerLanguageNameA, DWORD, (DWORD wLang, LPSTR szLang, DWORD cchLang), (wLang, szLang, cchLang));
+FUNC_EXPORT(VerLanguageNameW, DWORD, (DWORD wLang, LPWSTR szLang, DWORD cchLang), (wLang, szLang, cchLang));
+FUNC_EXPORT(VerQueryValueA, BOOL, (LPCVOID pBlock, LPCSTR lpSubBlock, LPVOID* lplpBuffer, PUINT puLen), (pBlock, lpSubBlock, lplpBuffer, puLen));
+FUNC_EXPORT(VerQueryValueW, BOOL, (LPCVOID pBlock, LPCWSTR lpSubBlock, LPVOID* lplpBuffer, PUINT puLen), (pBlock, lpSubBlock, lplpBuffer, puLen));
+
+#define FUNC_LOAD(Name_) \
+    g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_VersionDLL, #Name_));
+
+void Init()
+{
+    PWSTR path;
+    SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
+    std::filesystem::path p(path);
+    p /= "version.dll";
+    g_VersionDLL = LoadLibraryW(p.wstring().c_str());
+    FUNC_LOAD(GetFileVersionInfoA);
+    FUNC_LOAD(GetFileVersionInfoByHandle);
+    FUNC_LOAD(GetFileVersionInfoExA);
+    FUNC_LOAD(GetFileVersionInfoExW);
+    FUNC_LOAD(GetFileVersionInfoSizeA);
+    FUNC_LOAD(GetFileVersionInfoSizeExA);
+    FUNC_LOAD(GetFileVersionInfoSizeExW);
+    FUNC_LOAD(GetFileVersionInfoSizeW);
+    FUNC_LOAD(GetFileVersionInfoW);
+    FUNC_LOAD(VerFindFileA);
+    FUNC_LOAD(VerFindFileW);
+    FUNC_LOAD(VerInstallFileA);
+    FUNC_LOAD(VerInstallFileW);
+    FUNC_LOAD(VerLanguageNameA);
+    FUNC_LOAD(VerLanguageNameW);
+    FUNC_LOAD(VerQueryValueA);
+    FUNC_LOAD(VerQueryValueW);
+    CoTaskMemFree(path);
+
+    if(!g_callWndProcHook)
+        g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, g_Module, 0);
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule,
+                      DWORD  ul_reason_for_call,
+                      LPVOID lpReserved)
+{
+    switch (ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH:
+        g_Module = hModule;
+    case DLL_THREAD_ATTACH:
+    case DLL_THREAD_DETACH:
+        break;
+    case DLL_PROCESS_DETACH:
+        if (g_VersionDLL)
+        {
+            FreeLibrary(g_VersionDLL);
+            g_VersionDLL = nullptr;
+        }
+        break;
+    }
+    return TRUE;
+}
