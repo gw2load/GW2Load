@@ -1,17 +1,23 @@
+module;
 #include "framework.h"
-
 #include <d3d11.h>
 #include <wrl/client.h>
-#include <set>
+
+export module D3DHook;
+
+import std;
+import VTables;
 
 using namespace Microsoft::WRL;
 
-std::set<HWND> g_D3DHookedHWNDs;
+std::unordered_set<HWND> g_D3DKnownHWNDs;
 
-bool InitializeHook(HWND hWnd)
+export bool InitializeD3DHook(HWND hWnd)
 {
-	if (g_D3DHookedHWNDs.contains(hWnd))
+	if (g_D3DKnownHWNDs.contains(hWnd))
 		return false;
+
+	g_D3DKnownHWNDs.insert(hWnd);
 
 	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
 	DXGI_SWAP_CHAIN_DESC swapChainDesc;
@@ -32,8 +38,6 @@ bool InitializeHook(HWND hWnd)
 
 	if (FAILED(D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &tempSwapChain, &tempDevice, NULL, &tempContext)))
 		return false;
-
-	g_D3DHookedHWNDs.insert(hWnd);
 
 	OverwriteVTables(tempSwapChain.Get(), tempDevice.Get(), tempContext.Get());
 

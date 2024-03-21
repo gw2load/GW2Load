@@ -16,6 +16,7 @@
     <ProjectGuid>{4ac98c3c-db68-4c2c-a777-6bd654983307}</ProjectGuid>
     <RootNamespace>GW2VerLoad</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>GW2Load</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -57,6 +58,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <BuildStlModules>true</BuildStlModules>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -64,6 +66,7 @@
       <EnableUAC>false</EnableUAC>
       <ModuleDefinitionFile>Main.def</ModuleDefinitionFile>
       <AdditionalDependencies>Comctl32.lib;d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/IGNORE:4222 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>copy "$(TargetPath)" "$(GW2_INSTALL_DIR)"</Command>
@@ -79,6 +82,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <BuildStlModules>true</BuildStlModules>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -88,6 +92,7 @@
       <EnableUAC>false</EnableUAC>
       <ModuleDefinitionFile>Main.def</ModuleDefinitionFile>
       <AdditionalDependencies>Comctl32.lib;d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/IGNORE:4222 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>copy "$(TargetPath)" "$(GW2_INSTALL_DIR)"</Command>
@@ -97,10 +102,11 @@
     <ClInclude Include="framework.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="D3DHook.cpp" />
+    <ClCompile Include="D3DHook.ixx" />
     <ClCompile Include="dllmain.cpp" />
-    <ClCompile Include="Utils.cpp" />
-    <ClCompile Include="VTables.cpp" />
+    <ClCompile Include="Loader.ixx" />
+    <ClCompile Include="Utils.ixx" />
+    <ClCompile Include="VTables.ixx" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Main.def" />

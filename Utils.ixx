@@ -1,8 +1,9 @@
+module;
 #include "framework.h"
 
-#include <map>
-#include <string_view>
-#include <format>
+export module Utils;
+
+import std;
 
 #define DEFINE_MESSAGE(Msg_) { Msg_, #Msg_ }
 
@@ -174,7 +175,7 @@ static const std::map<unsigned int, std::string_view> g_MessageMap{
 	DEFINE_MESSAGE(WM_PRINTCLIENT)
 };
 
-std::string_view GetWndProcMessageName(UINT msg)
+export std::string_view GetWndProcMessageName(UINT msg)
 {
 	thread_local std::string lastMsg;
 

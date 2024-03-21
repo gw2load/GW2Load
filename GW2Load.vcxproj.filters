@@ -23,10 +23,16 @@
     <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Utils.cpp">
+    <ClCompile Include="Utils.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="D3DHook.cpp">
+    <ClCompile Include="D3DHook.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VTables.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Loader.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -2,46 +2,50 @@
 #include "framework.h"
 #include <d3d11.h>
 #include <Shlobj.h>
-#include <filesystem>
-#include <set>
-#include <iostream>
-#include <map>
-#include <string_view>
 
-HMODULE g_Module;
-std::set<HWND> g_HookedHWNDs;
+import std;
+import Loader;
+import Utils;
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (msg == WM_PAINT)
-        InitializeHook(hWnd);
-
-    if (msg == WM_PAINT || msg == WM_CREATE)
-    {
-        auto dbg = std::format("hwnd={} msg={}\n", (void*)hWnd, GetWndProcMessageName(msg));
-        OutputDebugStringA(dbg.c_str());
-    }
-
-    return DefSubclassProc(hWnd, msg, wParam, lParam);
-}
+HMODULE g_MSIMG32Handle = nullptr;
+HMODULE g_LoaderModuleHandle = nullptr;
+bool g_FirstWindowCreated = false;
+bool g_MainWindowCreated = false;
 
 HHOOK g_callWndProcHook = nullptr;
 LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    auto hwnd = ((CWPSTRUCT*)lParam)->hwnd;
-    if (nCode == HC_ACTION && hwnd && g_HookedHWNDs.count(hwnd) == 0) {
-        SetWindowSubclass(hwnd, WndProc, 0, 0);
-        g_HookedHWNDs.insert(hwnd);
+    const auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
+    if (nCode == HC_ACTION && message->hwnd)
+    {
+        OutputDebugStringA(std::format("msg = {} hwnd = {:x}\n", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd)).c_str());
+        if (message->message == WM_CREATE)
+        {
+            if (!g_FirstWindowCreated)
+            {
+                Initialize(InitializationType::BeforeFirstWindow, message->hwnd);
+                g_FirstWindowCreated = true;
+            }
+            
+            using namespace std::literals::string_view_literals;
+
+            const auto* create = reinterpret_cast<const CREATESTRUCT*>(message->lParam);
+            if (HIWORD(create->lpszClass) != 0 && std::wstring_view{ create->lpszClass } == L"ArenaNet_Gr_Window_Class"sv)
+            {
+                Initialize(InitializationType::BeforeGameWindow, message->hwnd);
+                g_MainWindowCreated = true;
+            }
+        }
     }
     return CallNextHookEx(0, nCode, wParam, lParam);
 }
 
 void Init();
-HMODULE g_RealDLL = nullptr;
 
 #define FUNC_EXPORT(Name_, Return_, Arguments_, Parameters_) \
     using Name_##_t = Return_(WINAPI*)Arguments_; \
     Name_##_t g_##Name_ = nullptr; \
     extern "C" Return_ WINAPI H##Name_ Arguments_ { \
-        if(!g_RealDLL) Init(); \
+        if(!g_MSIMG32Handle) Init(); \
         return g_##Name_ Parameters_; \
     }
 
@@ -53,7 +57,7 @@ FUNC_EXPORT(TransparentBlt, BOOL, (HDC hdcDest, int xoriginDest, int yoriginDest
 
 
 #define FUNC_LOAD(Name_) \
-    g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_RealDLL, #Name_));
+    g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_MSIMG32Handle, #Name_));
 
 void Init()
 {
@@ -61,7 +65,7 @@ void Init()
     SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
     std::filesystem::path p(path);
     p /= "msimg32.dll";
-    g_RealDLL = LoadLibraryW(p.wstring().c_str());
+    g_MSIMG32Handle = LoadLibraryW(p.wstring().c_str());
     FUNC_LOAD(vSetDdrawflag);
     FUNC_LOAD(AlphaBlend);
     FUNC_LOAD(DllInitialize);
@@ -80,15 +84,15 @@ BOOL APIENTRY DllMain(HMODULE hModule,
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
-        g_Module = hModule;
+        g_LoaderModuleHandle = hModule;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
         break;
     case DLL_PROCESS_DETACH:
-        if (g_RealDLL)
+        if (g_MSIMG32Handle)
         {
-            FreeLibrary(g_RealDLL);
-            g_RealDLL = nullptr;
+            FreeLibrary(g_MSIMG32Handle);
+            g_MSIMG32Handle = nullptr;
         }
         if (g_callWndProcHook)
         {

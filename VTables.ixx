@@ -1,10 +1,13 @@
+module;
 #include "framework.h"
-
-#include <set>
 
 #define CINTERFACE
 #define D3D11_NO_HELPERS
 #include <d3d11.h>
+
+export module VTables;
+
+import std;
 
 decltype(IDXGISwapChainVtbl::Present) RealPresent = nullptr;
 HRESULT STDMETHODCALLTYPE HkPresent(
@@ -19,7 +22,7 @@ std::set<IDXGISwapChainVtbl*> g_SwapChainTables;
 std::set<ID3D11DeviceVtbl*> g_DeviceTables;
 std::set<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
 
-void OverwriteVTables(void* sc, void* dev, void* ctx)
+export void OverwriteVTables(void* sc, void* dev, void* ctx)
 {
 	auto* swapChainVT = reinterpret_cast<IDXGISwapChain*>(sc)->lpVtbl;
 	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;
