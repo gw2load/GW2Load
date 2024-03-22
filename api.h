@@ -1,0 +1,67 @@
+#pragma once
+
+// GW2Load API Overview
+
+/*
+* 
+* 1. Folder structure
+* 
+* Throughout this document, "." will refer to Guild Wars 2's root installation path.
+* GW2Load will look for addons in subfolders of "./addons". DLLs found directly in the addons folder will be ignored.
+* Subfolders starting with "." or "_" characters will also be skipped.
+* Inside the subfolders, all DLLs will be checked for GW2Load exports. This is done *without* executing any code in the DLL.
+* 
+* 2. Exports
+* 
+* Only one export is required to be recognized as an addon:
+* bool GW2Load_GetAddonDescription(GW2Load_AddonDescription* desc);
+* The return value will be checked and addon loading will be aborted if it is false.
+* 
+* Additional exports will be detected at this time as well:
+* void GW2Load_OnLoad(GW2Load_API* api, IDXGISwapChain* swapChain, ID3D11Device* device, ID3D11DeviceContext* context);
+* void GW2Load_OnLoadLauncher(GW2Load_API* api);
+* void GW2Load_OnClose();
+* 
+* For advanced use only:
+* bool GW2Load_OnAddonDescriptionVersionOutdated(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
+* This will only be called if GW2Load's addon description version is *older* than the addon's, allowing the addon to adjust its behavior for the outdated loader.
+* The loader will handle backwards compatibility automatically (e.g., an addon using version 1 being loaded by a loader with version 2).
+* 
+* Once API capabilities have been determined, the DLL will be unloaded and scheduled for proper loading (via LoadLibrary) at the earliest exported OnLoad* event.
+* This is also when GetAddonDescription will be invoked.
+* 
+* As per Microsoft guidelines, do *NOT* run complex initialization in DllMain. Use one of the OnLoad events instead.
+* Similarly, it is recommended to run cleanup operations in the OnClose event.
+* 
+*/
+
+inline static constexpr unsigned int GW2Load_CurrentAddonDescriptionVersion = 1;
+
+struct GW2Load_AddonDescription
+{
+    unsigned int descriptionVersion; // Always set to GW2Load_CurrentAddonDescriptionVersion
+    unsigned int majorAddonVersion;
+    unsigned int minorAddonVersion;
+    unsigned int patchAddonVersion;
+    const wchar_t* name;
+};
+
+enum class GW2Load_HookedFunction
+{
+    Present, // void Present(IDXGISwapChain* swapChain);
+    ResizeBuffers // void ResizeBuffers(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
+};
+
+enum class GW2Load_CallbackPoint
+{
+    BeforeCall,
+    AfterCall
+};
+
+using GW2Load_GenericCallback = void(*)(); // Used as a placeholder for the actual function signature, see enum
+using GW2Load_RegisterCallback = void(*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
+
+struct GW2Load_API
+{
+    GW2Load_RegisterCallback registerCallback;
+};

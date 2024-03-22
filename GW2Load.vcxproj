@@ -99,6 +99,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="api.h" />
     <ClInclude Include="framework.h" />
   </ItemGroup>
   <ItemGroup>
