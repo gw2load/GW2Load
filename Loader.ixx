@@ -28,4 +28,9 @@ export
             break;
         }
     }
+
+    void Quit(HWND hwnd)
+    {
+        ShutdownD3DObjects(hwnd);
+    }
 }

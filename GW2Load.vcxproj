@@ -104,10 +104,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D3DHook.ixx" />
+    <ClCompile Include="D3DHook_general.ixx" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Loader.ixx" />
     <ClCompile Include="Utils.ixx" />
-    <ClCompile Include="VTables.ixx" />
+    <ClCompile Include="D3DHook_vtables.ixx" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Main.def" />

@@ -32,10 +32,13 @@
     <ClCompile Include="D3DHook.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VTables.ixx">
+    <ClCompile Include="D3DHook_vtables.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Loader.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D3DHook_general.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

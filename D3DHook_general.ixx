@@ -1,0 +1,102 @@
+module;
+#include "framework.h"
+#include <d3d11.h>
+#include <wrl/client.h>
+
+export module D3DHook:general;
+
+import std;
+import :vtables;
+import Utils;
+
+using namespace Microsoft::WRL;
+
+std::unordered_set<HWND> g_D3DKnownHWNDs;
+
+export bool InitializeD3DHook(HWND hWnd)
+{
+	if (g_D3DKnownHWNDs.contains(hWnd))
+		return false;
+
+	g_D3DKnownHWNDs.insert(hWnd);
+
+	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
+	DXGI_SWAP_CHAIN_DESC swapChainDesc;
+	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
+	swapChainDesc.BufferCount = 1;
+	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swapChainDesc.OutputWindow = hWnd;
+	swapChainDesc.SampleDesc.Count = 1;
+	swapChainDesc.Windowed = (GetWindowLong(hWnd, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
+	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+	ComPtr<IDXGISwapChain> tempSwapChain;
+	ComPtr<ID3D11Device> tempDevice;
+	ComPtr<ID3D11DeviceContext> tempContext;
+
+	if (FAILED(D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &tempSwapChain, &tempDevice, NULL, &tempContext)))
+		return false;
+
+	OverwriteVTables(tempSwapChain.Get(), tempDevice.Get(), tempContext.Get());
+
+	return true;
+}
+
+IDXGISwapChain* g_SwapChain = nullptr;
+ID3D11Device* g_Device = nullptr;
+ID3D11DeviceContext* g_DeviceContext = nullptr;
+HWND g_AssociatedWindow = nullptr;
+
+export void InitializeD3DObjects(IDXGISwapChain* swc)
+{
+	if (g_SwapChain != swc)
+	{
+		OutputDebugStringA(std::format("Updating swapchain from {} to {}...\n", fptr(g_SwapChain), fptr(swc)).c_str());
+		if (g_SwapChain) g_SwapChain->Release();
+		g_SwapChain = swc;
+		g_SwapChain->AddRef();
+
+		DXGI_SWAP_CHAIN_DESC desc;
+		g_SwapChain->GetDesc(&desc);
+		g_AssociatedWindow = desc.OutputWindow;
+
+		if (SUCCEEDED(g_SwapChain->GetDevice(IID_PPV_ARGS(&g_Device))))
+		{
+			OutputDebugStringA(std::format("Updating device to {}...\n", fptr(g_Device)).c_str());
+			g_Device->GetImmediateContext(&g_DeviceContext);
+			OutputDebugStringA(std::format("Updating immediate context to {}...\n", fptr(g_DeviceContext)).c_str());
+		}
+		else
+			OutputDebugStringA("ERROR: could not get device from swapchain!\n");
+	}
+}
+
+export void ShutdownD3DObjects(HWND hWnd)
+{
+	if (hWnd != g_AssociatedWindow)
+		return;
+
+	if (g_SwapChain)
+	{
+		OutputDebugStringA("Destroying swapchain...\n");
+		g_SwapChain->Release();
+		g_SwapChain = nullptr;
+	}
+	if (g_Device)
+	{
+		OutputDebugStringA("Destroying device...\n");
+		g_Device->Release();
+		g_Device = nullptr;
+	}
+	if (g_DeviceContext)
+	{
+		OutputDebugStringA("Destroying immediate context...\n");
+		g_DeviceContext->Release();
+		g_DeviceContext = nullptr;
+	}
+
+	g_AssociatedWindow = nullptr;
+}

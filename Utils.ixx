@@ -188,3 +188,8 @@ export std::string_view GetWndProcMessageName(UINT msg)
 		return lastMsg;
 	}
 }
+
+export const void* fptr(const auto* p)
+{
+	return static_cast<const void*>(p);
+}

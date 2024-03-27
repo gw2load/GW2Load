@@ -5,9 +5,11 @@ module;
 #define D3D11_NO_HELPERS
 #include <d3d11.h>
 
-export module VTables;
+export module D3DHook:vtables;
 
 import std;
+
+void InitializeD3DObjects(IDXGISwapChain* swc);
 
 void HookFunction(auto& function, const auto& hook, auto& backup)
 requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<std::add_pointer_t<decltype(hook)>>>
@@ -29,32 +31,13 @@ requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref
 	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
 }
 
-IDXGISwapChain* g_SwapChain;
-
-decltype(IDXGISwapChainVtbl::AddRef) RealSwapChainAddRef = nullptr;
-ULONG STDMETHODCALLTYPE HkSwapChainAddRef(
-	IDXGISwapChain* This
-)
-{
-	g_SwapChain = This;
-	//UnhookFunction(This->lpVtbl->AddRef, RealSwapChainAddRef);
-	return RealSwapChainAddRef(This);
-}
-
-decltype(IDXGISwapChainVtbl::Release) RealSwapChainRelease = nullptr;
-ULONG STDMETHODCALLTYPE HkSwapChainRelease(
-	IDXGISwapChain* This
-)
-{
-	return RealSwapChainRelease(This);
-}
-
 decltype(IDXGISwapChainVtbl::Present) RealSwapChainPresent = nullptr;
 HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
 	IDXGISwapChain* This,
 	UINT SyncInterval,
 	UINT Flags)
 {
+	InitializeD3DObjects(This);
 	return RealSwapChainPresent(This, SyncInterval, Flags);
 }
 
@@ -71,8 +54,6 @@ export void OverwriteVTables(void* sc, void* dev, void* ctx)
 	if (!g_SwapChainTables.contains(swapChainVT))
 	{
 		HookFunction(swapChainVT->Present, HkSwapChainPresent, RealSwapChainPresent);
-		HookFunction(swapChainVT->AddRef, HkSwapChainAddRef, RealSwapChainAddRef);
-		HookFunction(swapChainVT->Release, HkSwapChainRelease, RealSwapChainRelease);
 
 		g_SwapChainTables.insert(swapChainVT);
 	}

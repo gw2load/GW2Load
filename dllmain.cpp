@@ -35,6 +35,10 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
                 g_MainWindowCreated = true;
             }
         }
+        else if (message->message == WM_DESTROY)
+        {
+            Quit(message->hwnd);
+        }
     }
     return CallNextHookEx(0, nCode, wParam, lParam);
 }
