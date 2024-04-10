@@ -1,19 +1,13 @@
-module;
-#include "framework.h"
+#include "D3DHook.h"
+#include "Utils.h"
 #include <d3d11.h>
 #include <wrl/client.h>
-
-export module D3DHook:general;
-
-import std;
-import :vtables;
-import Utils;
 
 using namespace Microsoft::WRL;
 
 std::unordered_set<HWND> g_D3DKnownHWNDs;
 
-export bool InitializeD3DHook(HWND hWnd)
+bool InitializeD3DHook(HWND hWnd)
 {
 	if (g_D3DKnownHWNDs.contains(hWnd))
 		return false;
@@ -50,11 +44,11 @@ ID3D11Device* g_Device = nullptr;
 ID3D11DeviceContext* g_DeviceContext = nullptr;
 HWND g_AssociatedWindow = nullptr;
 
-export void InitializeD3DObjects(IDXGISwapChain* swc)
+void InitializeD3DObjects(IDXGISwapChain* swc)
 {
 	if (g_SwapChain != swc)
 	{
-		OutputDebugStringA(std::format("Updating swapchain from {} to {}...\n", fptr(g_SwapChain), fptr(swc)).c_str());
+		spdlog::debug("Updating swapchain from {} to {}...\n", fptr(g_SwapChain), fptr(swc));
 		if (g_SwapChain) g_SwapChain->Release();
 		g_SwapChain = swc;
 		g_SwapChain->AddRef();
@@ -65,16 +59,16 @@ export void InitializeD3DObjects(IDXGISwapChain* swc)
 
 		if (SUCCEEDED(g_SwapChain->GetDevice(IID_PPV_ARGS(&g_Device))))
 		{
-			OutputDebugStringA(std::format("Updating device to {}...\n", fptr(g_Device)).c_str());
+			spdlog::debug("Updating device to {}...\n", fptr(g_Device));
 			g_Device->GetImmediateContext(&g_DeviceContext);
-			OutputDebugStringA(std::format("Updating immediate context to {}...\n", fptr(g_DeviceContext)).c_str());
+			spdlog::debug("Updating immediate context to {}...\n", fptr(g_DeviceContext));
 		}
 		else
 			OutputDebugStringA("ERROR: could not get device from swapchain!\n");
 	}
 }
 
-export void ShutdownD3DObjects(HWND hWnd)
+void ShutdownD3DObjects(HWND hWnd)
 {
 	if (hWnd != g_AssociatedWindow)
 		return;

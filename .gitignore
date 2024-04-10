@@ -1,3 +1,4 @@
 *.user
 .vs
 **/x64
+vcpkg_installed

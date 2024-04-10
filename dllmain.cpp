@@ -1,11 +1,8 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
-#include "framework.h"
+#include "Loader.h"
+#include "Utils.h"
 #include <d3d11.h>
 #include <Shlobj.h>
-
-import std;
-import Loader;
-import Utils;
 
 HMODULE g_MSIMG32Handle = nullptr;
 HMODULE g_LoaderModuleHandle = nullptr;
@@ -17,7 +14,7 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     const auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
     if (nCode == HC_ACTION && message->hwnd)
     {
-        OutputDebugStringA(std::format("msg = {} hwnd = {:x}\n", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd)).c_str());
+        spdlog::debug("msg = {} hwnd = {:x}\n", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd));
         if (message->message == WM_CREATE)
         {
             if (!g_FirstWindowCreated)

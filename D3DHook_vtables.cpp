@@ -1,15 +1,8 @@
-module;
-#include "framework.h"
+#include "D3DHook.h"
 
 #define CINTERFACE
 #define D3D11_NO_HELPERS
 #include <d3d11.h>
-
-export module D3DHook:vtables;
-
-import std;
-
-void InitializeD3DObjects(IDXGISwapChain* swc);
 
 void HookFunction(auto& function, const auto& hook, auto& backup)
 requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<std::add_pointer_t<decltype(hook)>>>
@@ -41,11 +34,11 @@ HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
 	return RealSwapChainPresent(This, SyncInterval, Flags);
 }
 
-std::set<IDXGISwapChainVtbl*> g_SwapChainTables;
-std::set<ID3D11DeviceVtbl*> g_DeviceTables;
-std::set<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
+std::unordered_set<IDXGISwapChainVtbl*> g_SwapChainTables;
+std::unordered_set<ID3D11DeviceVtbl*> g_DeviceTables;
+std::unordered_set<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
 
-export void OverwriteVTables(void* sc, void* dev, void* ctx)
+void OverwriteVTables(void* sc, void* dev, void* ctx)
 {
 	auto* swapChainVT = reinterpret_cast<IDXGISwapChain*>(sc)->lpVtbl;
 	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;

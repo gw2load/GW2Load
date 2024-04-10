@@ -1,13 +1,8 @@
-module;
-#include "framework.h"
-
-export module Utils;
-
-import std;
+#include "common.h"
 
 #define DEFINE_MESSAGE(Msg_) { Msg_, #Msg_ }
 
-static const std::map<unsigned int, std::string_view> g_MessageMap{
+static const std::unordered_map<unsigned int, std::string_view> g_MessageMap{
 	DEFINE_MESSAGE(WM_CREATE),
 	DEFINE_MESSAGE(WM_DESTROY),
 	DEFINE_MESSAGE(WM_MOVE),
@@ -175,7 +170,7 @@ static const std::map<unsigned int, std::string_view> g_MessageMap{
 	DEFINE_MESSAGE(WM_PRINTCLIENT)
 };
 
-export std::string_view GetWndProcMessageName(UINT msg)
+std::string_view GetWndProcMessageName(UINT msg)
 {
 	thread_local std::string lastMsg;
 
@@ -187,9 +182,4 @@ export std::string_view GetWndProcMessageName(UINT msg)
 		lastMsg = std::format("unknown<{}>", msg);
 		return lastMsg;
 	}
-}
-
-export const void* fptr(const auto* p)
-{
-	return static_cast<const void*>(p);
 }
