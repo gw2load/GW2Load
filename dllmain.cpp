@@ -95,6 +95,8 @@ void Init()
 
     if(!g_callWndProcHook)
         g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, nullptr, GetCurrentThreadId());
+
+    Initialize(InitializationType::InLauncher, std::nullopt);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,
