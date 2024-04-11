@@ -48,7 +48,7 @@ void InitializeD3DObjects(IDXGISwapChain* swc)
 {
 	if (g_SwapChain != swc)
 	{
-		spdlog::debug("Updating swapchain from {} to {}...\n", fptr(g_SwapChain), fptr(swc));
+		spdlog::debug("Updating swapchain from {} to {}...", fptr(g_SwapChain), fptr(swc));
 		if (g_SwapChain) g_SwapChain->Release();
 		g_SwapChain = swc;
 		g_SwapChain->AddRef();
@@ -59,12 +59,12 @@ void InitializeD3DObjects(IDXGISwapChain* swc)
 
 		if (SUCCEEDED(g_SwapChain->GetDevice(IID_PPV_ARGS(&g_Device))))
 		{
-			spdlog::debug("Updating device to {}...\n", fptr(g_Device));
+			spdlog::debug("Updating device to {}...", fptr(g_Device));
 			g_Device->GetImmediateContext(&g_DeviceContext);
-			spdlog::debug("Updating immediate context to {}...\n", fptr(g_DeviceContext));
+			spdlog::debug("Updating immediate context to {}...", fptr(g_DeviceContext));
 		}
 		else
-			OutputDebugStringA("ERROR: could not get device from swapchain!\n");
+			spdlog::error("Could not get device from swapchain!");
 	}
 }
 
@@ -75,19 +75,19 @@ void ShutdownD3DObjects(HWND hWnd)
 
 	if (g_SwapChain)
 	{
-		OutputDebugStringA("Destroying swapchain...\n");
+		spdlog::debug("Destroying swapchain...");
 		g_SwapChain->Release();
 		g_SwapChain = nullptr;
 	}
 	if (g_Device)
 	{
-		OutputDebugStringA("Destroying device...\n");
+		spdlog::debug("Destroying device...");
 		g_Device->Release();
 		g_Device = nullptr;
 	}
 	if (g_DeviceContext)
 	{
-		OutputDebugStringA("Destroying immediate context...\n");
+		spdlog::debug("Destroying immediate context...");
 		g_DeviceContext->Release();
 		g_DeviceContext = nullptr;
 	}

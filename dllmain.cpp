@@ -4,6 +4,9 @@
 #include <d3d11.h>
 #include <Shlobj.h>
 
+#include <spdlog/sinks/msvc_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+
 HMODULE g_MSIMG32Handle = nullptr;
 HMODULE g_LoaderModuleHandle = nullptr;
 bool g_FirstWindowCreated = false;
@@ -14,7 +17,7 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     const auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
     if (nCode == HC_ACTION && message->hwnd)
     {
-        spdlog::debug("msg = {} hwnd = {:x}\n", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd));
+        spdlog::debug("msg = {} hwnd = {:x}", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd));
         if (message->message == WM_CREATE)
         {
             if (!g_FirstWindowCreated)
@@ -60,8 +63,24 @@ FUNC_EXPORT(TransparentBlt, BOOL, (HDC hdcDest, int xoriginDest, int yoriginDest
 #define FUNC_LOAD(Name_) \
     g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_MSIMG32Handle, #Name_));
 
+std::shared_ptr<spdlog::logger> g_Logger;
+
 void Init()
 {
+    std::filesystem::create_directories("addons/_logs/GW2Load");
+    auto outputLogger = std::make_shared<spdlog::sinks::msvc_sink_st>(true);
+    outputLogger->set_pattern("[GW2Load>%l|%T.%f] %v");
+    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_st>("addons/_logs/GW2Load/GW2Load.log", 100_kb, 10, true);
+    fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
+    g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list { outputLogger, fileLogger });
+    spdlog::set_default_logger(g_Logger);
+
+#ifdef _DEBUG
+    spdlog::set_level(spdlog::level::trace);
+#else
+    spdlog::set_level(spdlog::level::warn);
+#endif
+
     PWSTR path;
     SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
     std::filesystem::path p(path);
