@@ -2,18 +2,70 @@
 #include "D3DHook.h"
 #include "Utils.h"
 #include <dbghelp.h>
+#include "api.h"
 
-std::vector<ModuleSymbolData> g_AddonSignatures;
+template<>
+struct fmt::formatter<GW2Load_HookedFunction> : fmt::formatter<std::string_view> {
+    using Base = fmt::formatter<std::string_view>;
 
-struct ModuleSymbolData
+    template<class FmtContext>
+    FmtContext::iterator format(GW2Load_HookedFunction hf, FmtContext& ctx) const
+    {
+        switch (hf)
+        {
+        case GW2Load_HookedFunction::Present:
+            return Base::format("Present", ctx);
+        case GW2Load_HookedFunction::ResizeBuffers:
+            return Base::format("ResizeBuffers", ctx);
+        default:
+            assert(false);
+            return Base::format("<unknown>", ctx);
+        }
+    }
+};
+
+template<>
+struct fmt::formatter<GW2Load_CallbackPoint> : fmt::formatter<std::string_view> {
+    using Base = fmt::formatter<std::string_view>;
+
+    template<class FmtContext>
+    FmtContext::iterator format(GW2Load_CallbackPoint hf, FmtContext& ctx) const
+    {
+        switch (hf)
+        {
+        case GW2Load_CallbackPoint::BeforeCall:
+            return Base::format("BeforeCall", ctx);
+        case GW2Load_CallbackPoint::AfterCall:
+            return Base::format("AfterCall", ctx);
+        default:
+            assert(false);
+            return Base::format("<unknown>", ctx);
+        }
+    }
+};
+
+struct AddonData
 {
     std::filesystem::path file;
+
     bool hasGetAddonDesc = false;
     bool hasOnLoad = false;
     bool hasOnLoadLauncher = false;
     bool hasOnClose = false;
     bool hasOnOutdated = false;
+
+    HMODULE handle = nullptr;
+
+    GW2Load_GetAddonDescription getAddonDesc = nullptr;
+    GW2Load_OnLoad onLoad = nullptr;
+    GW2Load_OnLoadLauncher onLoadLauncher = nullptr;
+    GW2Load_OnClose onClose = nullptr;
+    GW2Load_OnAddonDescriptionVersionOutdated onOutdated = nullptr;
+
+    GW2Load_AddonDescription desc;
 };
+
+std::vector<AddonData> g_Addons;
 
 BOOL CALLBACK EnumSymProc(
     PSYMBOL_INFO pSymInfo,
@@ -23,7 +75,7 @@ BOOL CALLBACK EnumSymProc(
     if ((pSymInfo->Flags & SYMFLAG_EXPORT) == 0)
         return true;
 
-    auto& data = *static_cast<ModuleSymbolData*>(UserContext);
+    auto& data = *static_cast<AddonData*>(UserContext);
 
     std::string_view name{ pSymInfo->Name, pSymInfo->NameLen };
 
@@ -76,7 +128,7 @@ void EnumerateAddons()
                 continue;
             }
 
-            ModuleSymbolData data{ file.path() };
+            AddonData data{ file.path() };
 
             if (!SymEnumSymbols(currentProcess, dllBase, "GW2Load_*", EnumSymProc, &data))
             {
@@ -88,9 +140,117 @@ void EnumerateAddons()
                 spdlog::warn("Could not unload module {}: {}", data.file.string(), GetLastError());
 
             if (data.hasGetAddonDesc)
-                g_AddonSignatures.push_back(std::move(data));
+                g_Addons.push_back(std::move(data));
         }
     }
+}
+
+AddonData* g_CallbackAddon = nullptr;
+void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
+{
+    spdlog::debug("Registering callback for {}: func={} priority={}, callbackPoint={}, callback={}",
+        g_CallbackAddon->desc.name, func, priority, callbackPoint, reinterpret_cast<void*>(callback));
+}
+
+void InitializeAddons(bool launcher)
+{
+    GW2Load_API api{ RegisterCallback };
+
+    for (auto& addon : g_Addons)
+    {
+        if (launcher && addon.hasOnLoadLauncher || !launcher && addon.hasOnLoad && !addon.hasOnLoadLauncher)
+        {
+            addon.handle = LoadLibrary(addon.file.c_str());
+            if (addon.handle == nullptr)
+            {
+                spdlog::error("Addon {} could not be loaded: {}", addon.file.string(), GetLastError());
+                continue;
+            }
+
+            addon.getAddonDesc = reinterpret_cast<GW2Load_GetAddonDescription>(GetProcAddress(addon.handle, "GW2Load_GetAddonDescription"));
+            if (addon.hasOnLoad)
+                addon.onLoad = reinterpret_cast<GW2Load_OnLoad>(GetProcAddress(addon.handle, "GW2Load_OnLoad"));
+            if (addon.hasOnLoadLauncher)
+                addon.onLoadLauncher = reinterpret_cast<GW2Load_OnLoadLauncher>(GetProcAddress(addon.handle, "GW2Load_OnLoadLauncher"));
+            if (addon.hasOnClose)
+                addon.onClose = reinterpret_cast<GW2Load_OnClose>(GetProcAddress(addon.handle, "GW2Load_OnClose"));
+            if (addon.hasOnOutdated)
+                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonDescriptionVersionOutdated>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
+
+            if (!addon.getAddonDesc(&addon.desc))
+            {
+                spdlog::error("Addon {} refused to load, unloading...", addon.file.string());
+                FreeLibrary(addon.handle);
+                addon.handle = nullptr;
+                continue;
+            }
+
+            switch (addon.desc.descriptionVersion)
+            {
+            case GW2Load_CurrentAddonDescriptionVersion:
+                break;
+            default:
+            {
+                if (addon.desc.descriptionVersion < GW2Load_CurrentAddonDescriptionVersion)
+                {
+                    spdlog::error("Addon {} uses API version {}, which is too old for current loader API version {}, unloading...",
+                        addon.file.string(), addon.desc.descriptionVersion, GW2Load_CurrentAddonDescriptionVersion);
+                    FreeLibrary(addon.handle);
+                    addon.handle = nullptr;
+                    continue;
+                }
+                else if(uint32_t addonVer = addon.desc.descriptionVersion; addon.onOutdated && addon.onOutdated(GW2Load_CurrentAddonDescriptionVersion, &addon.desc))
+                {
+                    spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility, but consider upgrading your loader.",
+                        addon.file.string(), addonVer, GW2Load_CurrentAddonDescriptionVersion);
+                }
+                else
+                {
+                    spdlog::error("Addon {} uses API version {}, which is newer than current loader API version {}, unloading...",
+                        addon.file.string(), addon.desc.descriptionVersion, GW2Load_CurrentAddonDescriptionVersion);
+                    FreeLibrary(addon.handle);
+                    addon.handle = nullptr;
+                    continue;
+                }
+            }
+            }
+
+            spdlog::info("Addon {} recognized as {} v{}.{}.{}",
+                addon.file.string(), addon.desc.name, addon.desc.majorAddonVersion, addon.desc.minorAddonVersion, addon.desc.patchAddonVersion);
+        }
+
+        if (launcher && addon.onLoadLauncher)
+        {
+            g_CallbackAddon = &addon;
+            addon.onLoadLauncher(&api);
+            g_CallbackAddon = nullptr;
+            spdlog::debug("Addon {} OnLoadLauncher called.", addon.desc.name);
+        }
+        else if (!launcher && addon.onLoad)
+        {
+            g_CallbackAddon = &addon;
+            addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
+            g_CallbackAddon = nullptr;
+            spdlog::debug("Addon {} OnLoad called.", addon.desc.name);
+        }
+    }
+}
+
+void ShutdownAddons()
+{
+    for (auto& addon : g_Addons)
+    {
+        if (!addon.handle)
+            continue;
+
+        if (addon.onClose)
+            addon.onClose();
+
+        FreeLibrary(addon.handle);
+        addon.handle = nullptr;
+    }
+
+    g_Addons.clear();
 }
 
 void Initialize(InitializationType type, std::optional<HWND> hwnd)
@@ -99,6 +259,7 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
     {
     case InitializationType::InLauncher:
         EnumerateAddons();
+        InitializeAddons(true);
         break;
     case InitializationType::BeforeFirstWindow:
         break;
@@ -110,5 +271,6 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
 
 void Quit(HWND hwnd)
 {
+    ShutdownAddons();
     ShutdownD3DObjects(hwnd);
 }

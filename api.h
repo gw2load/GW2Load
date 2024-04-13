@@ -43,7 +43,7 @@ struct GW2Load_AddonDescription
     unsigned int majorAddonVersion;
     unsigned int minorAddonVersion;
     unsigned int patchAddonVersion;
-    const wchar_t* name;
+    const char* name;
 };
 
 enum class GW2Load_HookedFunction
@@ -65,3 +65,9 @@ struct GW2Load_API
 {
     GW2Load_RegisterCallback registerCallback;
 };
+
+using GW2Load_GetAddonDescription = bool(*)(GW2Load_AddonDescription* desc);
+using GW2Load_OnLoad = void(*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
+using GW2Load_OnLoadLauncher = void(*)(GW2Load_API* api);
+using GW2Load_OnClose = void(*)();
+using GW2Load_OnAddonDescriptionVersionOutdated = bool(*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);

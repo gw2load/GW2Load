@@ -2,6 +2,7 @@
 #include "Utils.h"
 #include <d3d11.h>
 #include <wrl/client.h>
+#include "Loader.h"
 
 using namespace Microsoft::WRL;
 
@@ -46,8 +47,13 @@ HWND g_AssociatedWindow = nullptr;
 
 void InitializeD3DObjects(IDXGISwapChain* swc)
 {
+	if (g_SwapChain != nullptr && g_SwapChain != swc)
+		spdlog::warn("Swapchain changed after initialization!");
+
 	if (g_SwapChain != swc)
 	{
+		const bool firstInit = g_SwapChain == nullptr;
+
 		spdlog::debug("Updating swapchain from {} to {}...", fptr(g_SwapChain), fptr(swc));
 		if (g_SwapChain) g_SwapChain->Release();
 		g_SwapChain = swc;
@@ -65,6 +71,9 @@ void InitializeD3DObjects(IDXGISwapChain* swc)
 		}
 		else
 			spdlog::error("Could not get device from swapchain!");
+
+		if (firstInit)
+			InitializeAddons(false);
 	}
 }
 

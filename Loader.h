@@ -10,4 +10,5 @@ enum class InitializationType
 };
 
 void Initialize(InitializationType type, std::optional<HWND> hwnd);
+void InitializeAddons(bool launcher);
 void Quit(HWND hwnd);
