@@ -1,4 +1,5 @@
 #include "common.h"
+#include "Utils.h"
 
 #define DEFINE_MESSAGE(Msg_) { Msg_, #Msg_ }
 
@@ -182,4 +183,13 @@ std::string_view GetWndProcMessageName(UINT msg)
 		lastMsg = std::format("unknown<{}>", msg);
 		return lastMsg;
 	}
+}
+
+const char* GetLastErrorMessage()
+{
+	static char buf[4096];
+	auto code = GetLastError();
+	if (FormatMessageA(0, nullptr, code, 0, buf, sizeof(buf), nullptr) == 0)
+		std::format_to_n(buf, sizeof(buf), "Code <{}>", code);
+	return buf;
 }

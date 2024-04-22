@@ -58,3 +58,5 @@ public:
         callback_();
     }
 };
+
+const char* GetLastErrorMessage();

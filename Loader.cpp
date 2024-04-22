@@ -98,14 +98,14 @@ void EnumerateAddons()
     HANDLE currentProcess;
     if (!DuplicateHandle(GetCurrentProcess(), GetCurrentProcess(), GetCurrentProcess(), &currentProcess, 0, false, DUPLICATE_SAME_ACCESS))
     {
-        spdlog::critical("Could not acquire process handle: {}", GetLastError());
+        spdlog::critical("Could not acquire process handle: {}", GetLastErrorMessage());
         return;
     }
     Cleanup closeHandle{ [&] { CloseHandle(currentProcess); } };
 
     if (!SymInitialize(currentProcess, nullptr, false))
     {
-        spdlog::critical("Could not initialize symbol handler: {}", GetLastError());
+        spdlog::critical("Could not initialize symbol handler: {}", GetLastErrorMessage());
         return;
     }
     Cleanup symbolCleanup{ [&] { SymCleanup(currentProcess); } };
@@ -124,7 +124,7 @@ void EnumerateAddons()
             auto dllBase = SymLoadModuleExW(currentProcess, nullptr, file.path().c_str(), nullptr, 0, 0, nullptr, 0);
             if (dllBase == 0)
             {
-                spdlog::warn("Could not load module {}: {}", file.path().string(), GetLastError());
+                spdlog::warn("Could not load module {}: {}", file.path().string(), GetLastErrorMessage());
                 continue;
             }
 
@@ -132,12 +132,12 @@ void EnumerateAddons()
 
             if (!SymEnumSymbols(currentProcess, dllBase, "GW2Load_*", EnumSymProc, &data))
             {
-                spdlog::warn("Could not enumerate symbols for {}: {}", data.file.string(), GetLastError());
+                spdlog::warn("Could not enumerate symbols for {}: {}", data.file.string(), GetLastErrorMessage());
                 continue;
             }
 
             if (!SymUnloadModule(currentProcess, dllBase))
-                spdlog::warn("Could not unload module {}: {}", data.file.string(), GetLastError());
+                spdlog::warn("Could not unload module {}: {}", data.file.string(), GetLastErrorMessage());
 
             if (data.hasGetAddonDesc)
                 g_Addons.push_back(std::move(data));
@@ -163,7 +163,7 @@ void InitializeAddons(bool launcher)
             addon.handle = LoadLibrary(addon.file.c_str());
             if (addon.handle == nullptr)
             {
-                spdlog::error("Addon {} could not be loaded: {}", addon.file.string(), GetLastError());
+                spdlog::error("Addon {} could not be loaded: {}", addon.file.string(), GetLastErrorMessage());
                 continue;
             }
 

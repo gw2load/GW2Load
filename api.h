@@ -35,7 +35,8 @@
 * 
 */
 
-inline static constexpr unsigned int GW2Load_CurrentAddonDescriptionVersion = 1;
+inline static constexpr unsigned int GW2Load_AddonDescriptionVersionMagicFlag = 0xF0CF0000;
+inline static constexpr unsigned int GW2Load_CurrentAddonDescriptionVersion = GW2Load_AddonDescriptionVersionMagicFlag | 1;
 
 struct GW2Load_AddonDescription
 {
@@ -46,14 +47,16 @@ struct GW2Load_AddonDescription
     const char* name;
 };
 
-enum class GW2Load_HookedFunction
+enum class GW2Load_HookedFunction : unsigned int
 {
+    Undefined = 0, // Reserved, do not use
     Present, // void Present(IDXGISwapChain* swapChain);
     ResizeBuffers // void ResizeBuffers(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
 };
 
-enum class GW2Load_CallbackPoint
+enum class GW2Load_CallbackPoint : unsigned int
 {
+    Undefined = 0, // Reserved, do not use
     BeforeCall,
     AfterCall
 };
