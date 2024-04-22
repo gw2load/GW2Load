@@ -18,6 +18,11 @@
 
 #include "api.h"
 
+constexpr unsigned int PrintDescVersion(int v)
+{
+    return v & ~GW2Load_AddonDescriptionVersionMagicFlag;
+}
+
 enum class CallbackIndex : unsigned int {};
 
 constexpr CallbackIndex GetIndex(GW2Load_HookedFunction function, GW2Load_CallbackPoint point)
