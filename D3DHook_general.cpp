@@ -1,8 +1,10 @@
 #include "D3DHook.h"
 #include "Utils.h"
-#include <d3d11.h>
-#include <wrl/client.h>
 #include "Loader.h"
+
+#include <d3d11_1.h>
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 
 using namespace Microsoft::WRL;
 
@@ -102,4 +104,22 @@ void ShutdownD3DObjects(HWND hWnd)
 	}
 
 	g_AssociatedWindow = nullptr;
+}
+
+IDXGISwapChain1* GetSwapChain1(IDXGISwapChain* sc)
+{
+	IDXGISwapChain1* sc1 = nullptr;
+	if (SUCCEEDED(sc->QueryInterface(&sc1)))
+		return sc1;
+	else
+		return nullptr;
+}
+
+IDXGISwapChain3* GetSwapChain3(IDXGISwapChain* sc)
+{
+	IDXGISwapChain3* sc3 = nullptr;
+	if (SUCCEEDED(sc->QueryInterface(&sc3)))
+		return sc3;
+	else
+		return nullptr;
 }

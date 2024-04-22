@@ -3,6 +3,7 @@
 #include "Utils.h"
 #include <dbghelp.h>
 #include "api.h"
+#include <d3d11_1.h>
 
 template<>
 struct fmt::formatter<GW2Load_HookedFunction> : fmt::formatter<std::string_view> {
@@ -13,13 +14,15 @@ struct fmt::formatter<GW2Load_HookedFunction> : fmt::formatter<std::string_view>
     {
         switch (hf)
         {
+        case GW2Load_HookedFunction::Undefined:
+            return Base::format("Undefined", ctx);
         case GW2Load_HookedFunction::Present:
             return Base::format("Present", ctx);
         case GW2Load_HookedFunction::ResizeBuffers:
             return Base::format("ResizeBuffers", ctx);
         default:
             assert(false);
-            return Base::format("<unknown>", ctx);
+            return std::format_to(ctx.out(), "<unknown {}>", std::to_underlying(hf));
         }
     }
 };
@@ -33,13 +36,15 @@ struct fmt::formatter<GW2Load_CallbackPoint> : fmt::formatter<std::string_view> 
     {
         switch (hf)
         {
+        case GW2Load_CallbackPoint::Undefined:
+            return Base::format("Undefined", ctx);
         case GW2Load_CallbackPoint::BeforeCall:
             return Base::format("BeforeCall", ctx);
         case GW2Load_CallbackPoint::AfterCall:
             return Base::format("AfterCall", ctx);
         default:
             assert(false);
-            return Base::format("<unknown>", ctx);
+            return std::format_to(ctx.out(), "<unknown {}>", std::to_underlying(hf));
         }
     }
 };
@@ -149,7 +154,25 @@ AddonData* g_CallbackAddon = nullptr;
 void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
     spdlog::debug("Registering callback for {}: func={} priority={}, callbackPoint={}, callback={}",
-        g_CallbackAddon->desc.name, func, priority, callbackPoint, reinterpret_cast<void*>(callback));
+        g_CallbackAddon->desc.name, func, priority, callbackPoint, fptr(callback));
+
+    if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
+    {
+        spdlog::error("Error when registering callback for {}: invalid function {}.", g_CallbackAddon->desc.name, func);
+        return;
+    }
+    if (callbackPoint == GW2Load_CallbackPoint::Undefined || callbackPoint >= GW2Load_CallbackPoint::Count)
+    {
+        spdlog::error("Error when registering callback for {} at function {}: invalid callback point {}.", g_CallbackAddon->desc.name, func, callbackPoint);
+        return;
+    }
+    if (callback == nullptr)
+    {
+        spdlog::error("Error when registering callback for {} at function {} point {}: null callback.", g_CallbackAddon->desc.name, func, callbackPoint);
+        return;
+    }
+
+    g_Callbacks[GetIndex(func, callbackPoint)].emplace_back(priority, callback);
 }
 
 void InitializeAddons(bool launcher)
@@ -233,6 +256,11 @@ void InitializeAddons(bool launcher)
             g_CallbackAddon = nullptr;
             spdlog::debug("Addon {} OnLoad called.", addon.desc.name);
         }
+    }
+
+    for (auto&& [i, cbs] : g_Callbacks)
+    {
+        std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
     }
 }
 

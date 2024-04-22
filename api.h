@@ -51,14 +51,18 @@ enum class GW2Load_HookedFunction : unsigned int
 {
     Undefined = 0, // Reserved, do not use
     Present, // void Present(IDXGISwapChain* swapChain);
-    ResizeBuffers // void ResizeBuffers(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
+    ResizeBuffers, // void ResizeBuffers(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
+
+    Count
 };
 
 enum class GW2Load_CallbackPoint : unsigned int
 {
     Undefined = 0, // Reserved, do not use
     BeforeCall,
-    AfterCall
+    AfterCall,
+
+    Count
 };
 
 using GW2Load_GenericCallback = void(*)(); // Used as a placeholder for the actual function signature, see enum
