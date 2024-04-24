@@ -175,6 +175,52 @@ void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_Callbac
     g_Callbacks[GetIndex(func, callbackPoint)].emplace_back(priority, callback);
 }
 
+template<typename F, typename... Args> requires (!std::is_void_v<std::invoke_result_t<F>> && !std::is_same_v<bool, std::invoke_result_t<F>>)
+std::optional<std::invoke_result_t<F>> SafeCall(F&& func, auto&& err)
+{
+    __try
+    {
+        return func();
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        err();
+    }
+
+    return std::nullopt;
+}
+
+template<typename F, typename... Args> requires std::is_void_v<std::invoke_result_t<F>>
+bool SafeCall(F&& func, auto&& err)
+{
+    __try
+    {
+        func();
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        err();
+    }
+
+    return false;
+}
+
+template<typename F, typename... Args> requires std::is_same_v<bool, std::invoke_result_t<F>>
+bool SafeCall(F&& func, auto&& err)
+{
+    __try
+    {
+        return func();
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        err();
+    }
+
+    return false;
+}
+
 void InitializeAddons(bool launcher)
 {
     GW2Load_API api{ RegisterCallback };
@@ -200,23 +246,21 @@ void InitializeAddons(bool launcher)
             if (addon.hasOnOutdated)
                 addon.onOutdated = reinterpret_cast<GW2Load_OnAddonDescriptionVersionOutdated>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
 
-            __try
-            {
-                if (!addon.getAddonDesc(&addon.desc))
-                {
-                    spdlog::error("Addon {} refused to load, unloading...", addon.file.string());
+            if (!SafeCall([&] {
+                    if (!addon.getAddonDesc(&addon.desc))
+                    {
+                        spdlog::error("Addon {} refused to load, unloading...", addon.file.string());
+                        FreeLibrary(addon.handle);
+                        addon.handle = nullptr;
+                        return false;
+                    }
+                    return true;
+                }, [&] {
+                    spdlog::error("Error in addon {} GetAddonDescription, unloading...", addon.file.string());
                     FreeLibrary(addon.handle);
                     addon.handle = nullptr;
-                    continue;
-                }
-            }
-            __except (EXCEPTION_EXECUTE_HANDLER)
-            {
-                spdlog::error("Error in addon {} GetAddonDescription, unloading...", addon.file.string());
-                FreeLibrary(addon.handle);
-                addon.handle = nullptr;
+                    }))
                 continue;
-            }
 
             switch (addon.desc.descriptionVersion)
             {
@@ -235,21 +279,18 @@ void InitializeAddons(bool launcher)
                 }
                 else if(uint32_t addonVer = addon.desc.descriptionVersion; addon.onOutdated)
                 {
-                    __try
-                    {
-                        if (addon.onOutdated(GW2Load_CurrentAddonDescriptionVersion, &addon.desc))
-                        {
-                            spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility, but consider upgrading your loader.",
-                                addon.file.string(), addonVer, PrintDescVersion(GW2Load_CurrentAddonDescriptionVersion));
-                        }
-                    }
-                    __except (EXCEPTION_EXECUTE_HANDLER)
-                    {
-                        spdlog::error("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.desc.name);
-                        FreeLibrary(addon.handle);
-                        addon.handle = nullptr;
+                    if (!SafeCall([&] {
+                            if (addon.onOutdated(GW2Load_CurrentAddonDescriptionVersion, &addon.desc))
+                            {
+                                spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility, but consider upgrading your loader.",
+                                    addon.file.string(), addonVer, PrintDescVersion(GW2Load_CurrentAddonDescriptionVersion));
+                            }
+                        }, [&] {
+                            spdlog::error("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.desc.name);
+                            FreeLibrary(addon.handle);
+                            addon.handle = nullptr;
+                            }))
                         continue;
-                    }
                 }
                 
                 if(addon.desc.descriptionVersion > GW2Load_CurrentAddonDescriptionVersion)
@@ -270,32 +311,31 @@ void InitializeAddons(bool launcher)
         if (launcher && addon.onLoadLauncher)
         {
             g_CallbackAddon = &addon;
-            __try
-            {
-                addon.onLoadLauncher(&api);
-            }
-            __except (EXCEPTION_EXECUTE_HANDLER)
-            {
-                spdlog::error("Error in addon {} OnLoadLauncher, unloading...", addon.desc.name);
-                FreeLibrary(addon.handle);
-                addon.handle = nullptr;
-            }
+
+            SafeCall(
+                [&] {
+                    addon.onLoadLauncher(&api);
+                },
+                [&] {
+                    spdlog::error("Error in addon {} OnLoadLauncher, unloading...", addon.desc.name);
+                    FreeLibrary(addon.handle);
+                    addon.handle = nullptr;
+                });
             g_CallbackAddon = nullptr;
             spdlog::debug("Addon {} OnLoadLauncher called.", addon.desc.name);
         }
         else if (!launcher && addon.onLoad)
         {
             g_CallbackAddon = &addon;
-            __try
-            {
-                addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
-            }
-            __except (EXCEPTION_EXECUTE_HANDLER)
-            {
-                spdlog::error("Error in addon {} OnLoad, unloading...", addon.desc.name);
-                FreeLibrary(addon.handle);
-                addon.handle = nullptr;
-            }
+            SafeCall(
+                [&] {
+                    addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
+                },
+                [&] {
+                    spdlog::error("Error in addon {} OnLoad, unloading...", addon.desc.name);
+                    FreeLibrary(addon.handle);
+                    addon.handle = nullptr;
+                });
             g_CallbackAddon = nullptr;
             spdlog::debug("Addon {} OnLoad called.", addon.desc.name);
         }
@@ -344,4 +384,9 @@ void Quit(HWND hwnd)
 {
     ShutdownAddons();
     ShutdownD3DObjects(hwnd);
+}
+
+void LauncherClosing(HWND hwnd)
+{
+
 }

@@ -10,6 +10,7 @@
 HMODULE g_MSIMG32Handle = nullptr;
 HMODULE g_LoaderModuleHandle = nullptr;
 bool g_FirstWindowCreated = false;
+bool g_LauncherClosed = false;
 bool g_MainWindowCreated = false;
 
 HHOOK g_callWndProcHook = nullptr;
@@ -37,7 +38,13 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
         }
         else if (message->message == WM_DESTROY)
         {
-            Quit(message->hwnd);
+            if (g_FirstWindowCreated)
+                Quit(message->hwnd);
+            else if (!g_LauncherClosed)
+            {
+                LauncherClosing(message->hwnd);
+                g_LauncherClosed = true;
+            }
         }
     }
     return CallNextHookEx(0, nCode, wParam, lParam);
