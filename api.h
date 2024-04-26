@@ -28,11 +28,11 @@
 * This will only be called if GW2Load's addon description version is *older* than the addon's, allowing the addon to adjust its behavior for the outdated loader.
 * The loader will handle backwards compatibility automatically (e.g., an addon using version 1 being loaded by a loader with version 2).
 * 
-* void GW2Load_UpdateCheck(unsigned char* data, unsigned int* dataSize, bool* dataIsfileName);
-* If the callback is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
-* The callback will be called twice:
-*   - The first time, provide the desired size for the allocation in dataSize. Other parameters will be null. If the given size is zero, updating is skipped.
-*   - The second time, fill the data buffer and set the boolean flag as appropriate.
+* using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
+* void GW2Load_UpdateCheck(GW2Load_UpdateCallback* callback);
+* If the export is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
+* The provided callback may be called by the addon to signal to the loader that an update is pending.
+* The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
 * Two interpretations of the data buffer are available:
 *   - If dataIsfileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
 *     The addon will be unloaded and replaced with the new file, then reloaded.
@@ -82,6 +82,7 @@ enum class GW2Load_CallbackPoint : unsigned int
 
 using GW2Load_GenericCallback = void(*)(); // Used as a placeholder for the actual function signature, see enum
 using GW2Load_RegisterCallback = void(*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
+using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 
 struct GW2Load_API
 {
