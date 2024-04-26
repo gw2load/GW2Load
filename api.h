@@ -31,7 +31,7 @@
 * void GW2Load_UpdateCheck(unsigned char* data, unsigned int* dataSize, bool* dataIsfileName);
 * If the callback is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
 * The callback will be called twice:
-*   - The first time, provide the desired size for the allocation in dataSize. Other parameters will be null.
+*   - The first time, provide the desired size for the allocation in dataSize. Other parameters will be null. If the given size is zero, updating is skipped.
 *   - The second time, fill the data buffer and set the boolean flag as appropriate.
 * Two interpretations of the data buffer are available:
 *   - If dataIsfileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
@@ -93,3 +93,4 @@ using GW2Load_OnLoad = bool(*)(GW2Load_API* api, struct IDXGISwapChain* swapChai
 using GW2Load_OnLoadLauncher = bool(*)(GW2Load_API* api);
 using GW2Load_OnClose = void(*)();
 using GW2Load_OnAddonDescriptionVersionOutdated = bool(*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
+using GW2Load_UpdateCheck = void(*)(unsigned char* data, unsigned int* dataSize, bool* dataIsfileName);
