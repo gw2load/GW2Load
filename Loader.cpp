@@ -227,7 +227,7 @@ void InitializeAddons(bool launcher)
 
     for (auto& addon : g_Addons)
     {
-        if (launcher && addon.hasOnLoadLauncher || !launcher && addon.hasOnLoad && !addon.hasOnLoadLauncher)
+        if (launcher)
         {
             addon.handle = LoadLibrary(addon.file.c_str());
             if (addon.handle == nullptr)
@@ -312,30 +312,42 @@ void InitializeAddons(bool launcher)
         {
             g_CallbackAddon = &addon;
 
-            SafeCall(
+            if(!SafeCall(
                 [&] {
-                    addon.onLoadLauncher(&api);
+                    return addon.onLoadLauncher(&api);
                 },
                 [&] {
                     spdlog::error("Error in addon {} OnLoadLauncher, unloading...", addon.desc.name);
                     FreeLibrary(addon.handle);
                     addon.handle = nullptr;
-                });
+                }))
+            {
+                spdlog::error("Addon {} OnLoadLauncher signaled a problem, unloading...", addon.desc.name);
+                FreeLibrary(addon.handle);
+                addon.handle = nullptr;
+            }
+
             g_CallbackAddon = nullptr;
             spdlog::debug("Addon {} OnLoadLauncher called.", addon.desc.name);
         }
-        else if (!launcher && addon.onLoad)
+
+        if (!launcher && addon.onLoad)
         {
             g_CallbackAddon = &addon;
-            SafeCall(
+            if(!SafeCall(
                 [&] {
-                    addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
+                    return addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
                 },
                 [&] {
                     spdlog::error("Error in addon {} OnLoad, unloading...", addon.desc.name);
                     FreeLibrary(addon.handle);
                     addon.handle = nullptr;
-                });
+                }))
+            {
+                spdlog::error("Addon {} OnLoad signaled a problem, unloading...", addon.desc.name);
+                FreeLibrary(addon.handle);
+                addon.handle = nullptr;
+            }
             g_CallbackAddon = nullptr;
             spdlog::debug("Addon {} OnLoad called.", addon.desc.name);
         }
