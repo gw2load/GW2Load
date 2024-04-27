@@ -80,6 +80,8 @@ std::vector<AddonData> g_Addons;
 bool g_AddonsInitialized = false;
 
 std::vector<AddonData*> g_DelayedAddons;
+std::mutex g_DelayedAddonsTimesMutex;
+std::vector<std::chrono::system_clock::time_point> g_DelayedAddonsTimes;
 std::future<void> g_DelayedAddonsManagerFuture;
 
 BOOL CALLBACK EnumSymProc(
@@ -385,7 +387,19 @@ void UpdateAddon(AddonData* addon)
 {
     GW2Load_UpdateAPI api{ UpdateNotificationCallback };
     g_UpdateAddon = addon;
-    Cleanup cleanAddon([] { g_UpdateAddon = nullptr; });
+    {
+        std::scoped_lock lock(g_DelayedAddonsTimesMutex);
+        g_DelayedAddonsTimes.push_back(std::chrono::system_clock::now());
+    }
+
+    spdlog::info("Checking for updates for addon {}...", addon->file.string());
+    Cleanup cleanAddon([] {
+        std::scoped_lock lock(g_DelayedAddonsTimesMutex);
+        g_DelayedAddonsTimes.push_back(std::chrono::system_clock::now());
+        auto dt = g_DelayedAddonsTimes.back() - g_DelayedAddonsTimes[g_DelayedAddonsTimes.size() - 2];
+        spdlog::info("Update check for addon {} complete, took {}.", g_UpdateAddon->file.string(), dt);
+        g_UpdateAddon = nullptr;
+        });
 
     if (SafeCall([&] {
         addon->updateCheck(&api);
@@ -432,7 +446,7 @@ void UpdateAddon(AddonData* addon)
 
             auto newAddon = InspectAddon(addon->file);
             if (newAddon)
-                *addon = *newAddon;
+                *addon = *newAddon; // FIXME: Does this correctly update g_DelayedAddons and g_Addons?
             else
             {
                 spdlog::error("Addon {} could not be reloaded after update, aborting...", addon->file.string());
@@ -449,9 +463,6 @@ void InitializeAddons(bool launcher)
     for (auto& addon : g_Addons)
         InitializeAddon(addon, launcher);
     g_AddonsInitialized = true;
-
-    for (auto&& [i, cbs] : g_Callbacks)
-        std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
 
     if (!g_DelayedAddons.empty())
     {
@@ -504,10 +515,39 @@ void Quit(HWND hwnd)
 void LauncherClosing(HWND hwnd)
 {
     using namespace std::chrono_literals;
-    if (!g_DelayedAddonsManagerFuture.valid() && g_DelayedAddonsManagerFuture.wait_for(2s) != std::future_status::ready)
+    if (!g_DelayedAddonsManagerFuture.valid() && g_DelayedAddonsManagerFuture.wait_for(5s) != std::future_status::ready)
     {
-        // FIXME: Do something
+        std::scoped_lock lock(g_DelayedAddonsTimesMutex);
+
+        AddonData* faultyAddon = nullptr;
+        size_t start = g_DelayedAddonsTimes.size() / 2;
+        if (g_DelayedAddonsTimes.size() % 2 == 1)
+        {
+            faultyAddon = g_DelayedAddons[start++];
+            spdlog::info("Could not update addon {}, timed out while waiting for update.", faultyAddon->file.string());
+        }
+        for (size_t i = start; i < g_DelayedAddons.size(); ++i)
+        {
+            const auto& addon = *g_DelayedAddons[i];
+            spdlog::info("Could not update addon {}, timed out before starting.", addon.file.string());
+        }
+
+        spdlog::critical("Could not update all addons within 5 seconds of the launcher closing, terminating game!");
+
+        const auto msg = [&] {
+            if (faultyAddon)
+                std::format("The addon {} took too long to update and may have crashed. For safety reasons, the game will now close.", faultyAddon->file.string());
+            else
+                return std::string("One or more addons took too long to update. For safety reasons, the game will now close.");
+            }();
+        MessageBoxA(g_AssociatedWindow, msg.c_str(), "Addon Update Failed", MB_OK | MB_ICONEXCLAMATION);
+
+        spdlog::default_logger()->flush();
+        std::terminate();
     }
+
+    for (auto&& [i, cbs] : g_Callbacks)
+        std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
 
     SymCleanup(g_CurrentProcess);
     CloseHandle(g_CurrentProcess);
