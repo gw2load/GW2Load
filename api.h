@@ -29,7 +29,7 @@
 * The loader will handle backwards compatibility automatically (e.g., an addon using version 1 being loaded by a loader with version 2).
 * 
 * using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
-* void GW2Load_UpdateCheck(GW2Load_UpdateCallback* callback);
+* void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
 * If the export is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
 * The provided callback may be called by the addon to signal to the loader that an update is pending.
 * The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
@@ -80,13 +80,18 @@ enum class GW2Load_CallbackPoint : unsigned int
     Count
 };
 
-using GW2Load_GenericCallback = void(*)(); // Used as a placeholder for the actual function signature, see enum
-using GW2Load_RegisterCallback = void(*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
-using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
+using GW2Load_GenericCallback = void(__cdecl*)(); // Used as a placeholder for the actual function signature, see enum
+using GW2Load_RegisterCallback = void(__cdecl*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
+using GW2Load_UpdateCallback = void(__cdecl*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 
 struct GW2Load_API
 {
     GW2Load_RegisterCallback registerCallback;
+};
+
+struct GW2Load_UpdateAPI
+{
+    GW2Load_UpdateCallback registerCallback;
 };
 
 using GW2Load_GetAddonDescription = bool(*)(GW2Load_AddonDescription* desc);
@@ -94,4 +99,4 @@ using GW2Load_OnLoad = bool(*)(GW2Load_API* api, struct IDXGISwapChain* swapChai
 using GW2Load_OnLoadLauncher = bool(*)(GW2Load_API* api);
 using GW2Load_OnClose = void(*)();
 using GW2Load_OnAddonDescriptionVersionOutdated = bool(*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
-using GW2Load_UpdateCheck = void(*)(unsigned char* data, unsigned int* dataSize, bool* dataIsfileName);
+using GW2Load_UpdateCheck = void(*)(GW2Load_UpdateAPI* api);
