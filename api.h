@@ -103,9 +103,9 @@ struct GW2Load_UpdateAPI
     GW2Load_UpdateCallback updateCallback;
 };
 
-using GW2Load_GetAddonDescription = bool(*)(GW2Load_AddonDescription* desc);
-using GW2Load_OnLoad = bool(*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
-using GW2Load_OnLoadLauncher = bool(*)(GW2Load_API* api);
-using GW2Load_OnClose = void(*)();
-using GW2Load_OnAddonDescriptionVersionOutdated = bool(*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
-using GW2Load_UpdateCheck = void(*)(GW2Load_UpdateAPI* api);
+using GW2Load_GetAddonDescription_t = bool(*)(GW2Load_AddonDescription* desc);
+using GW2Load_OnLoad_t = bool(*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
+using GW2Load_OnLoadLauncher_t = bool(*)(GW2Load_API* api);
+using GW2Load_OnClose_t = void(*)();
+using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
+using GW2Load_UpdateCheck_t = void(*)(GW2Load_UpdateAPI* api);
