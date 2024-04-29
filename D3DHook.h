@@ -10,6 +10,7 @@ bool InitializeD3DHook(HWND hWnd);
 void InitializeD3DObjects(IDXGISwapChain* swc);
 void ShutdownD3DObjects(HWND hWnd);
 void OverwriteVTables(void* sc, void* dev, void* ctx);
+void RestoreVTables();
 IDXGISwapChain1* GetSwapChain1(IDXGISwapChain* sc);
 IDXGISwapChain3* GetSwapChain3(IDXGISwapChain* sc);
 

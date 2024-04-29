@@ -93,7 +93,7 @@ struct GW2Load_API
         GW2Load_GenericCallback cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
         registerCallback(func, priority, callbackPoint, cb);
     }
-private:
+protected:
 #endif
     GW2Load_RegisterCallback registerCallback;
 };

@@ -6,6 +6,8 @@
 #include <d3d11_1.h>
 #include <future>
 
+std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
+
 template<>
 struct fmt::formatter<GW2Load_HookedFunction> : fmt::formatter<std::string_view> {
     using Base = fmt::formatter<std::string_view>;
@@ -63,12 +65,12 @@ struct AddonData
 
     HMODULE handle = nullptr;
 
-    GW2Load_GetAddonDescription getAddonDesc = nullptr;
-    GW2Load_OnLoad onLoad = nullptr;
-    GW2Load_OnLoadLauncher onLoadLauncher = nullptr;
-    GW2Load_OnClose onClose = nullptr;
-    GW2Load_OnAddonDescriptionVersionOutdated onOutdated = nullptr;
-    GW2Load_UpdateCheck updateCheck = nullptr;
+    GW2Load_GetAddonDescription_t getAddonDesc = nullptr;
+    GW2Load_OnLoad_t onLoad = nullptr;
+    GW2Load_OnLoadLauncher_t onLoadLauncher = nullptr;
+    GW2Load_OnClose_t onClose = nullptr;
+    GW2Load_OnAddonDescriptionVersionOutdated_t onOutdated = nullptr;
+    GW2Load_UpdateCheck_t updateCheck = nullptr;
 
     GW2Load_AddonDescription desc;
 
@@ -89,9 +91,6 @@ BOOL CALLBACK EnumSymProc(
     ULONG SymbolSize,
     PVOID UserContext)
 {
-    if ((pSymInfo->Flags & SYMFLAG_EXPORT) == 0)
-        return true;
-
     auto& data = *static_cast<AddonData*>(UserContext);
 
     std::string_view name{ pSymInfo->Name, pSymInfo->NameLen };
@@ -194,7 +193,8 @@ void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_Callbac
         return;
     }
 
-    g_Callbacks[GetIndex(func, callbackPoint)].emplace_back(priority, callback);
+    const auto idx = GetIndex(func, callbackPoint);
+    g_Callbacks[idx].emplace_back(priority, callback);
 }
 
 template<typename F, typename... Args> requires (!std::is_void_v<std::invoke_result_t<F>> && !std::is_same_v<bool, std::invoke_result_t<F>>)
@@ -254,9 +254,17 @@ void UpdateNotificationCallback(void* data, unsigned int sizeInBytes, bool dataI
     g_UpdateAddon->updateDataIsFileName = dataIsFileName;
 }
 
+struct GW2Load_API_Internal : public GW2Load_API
+{
+    GW2Load_API_Internal(GW2Load_RegisterCallback cb)
+    {
+        registerCallback = cb;
+    }
+};
+
 bool InitializeAddon(AddonData& addon, bool launcher)
 {
-    GW2Load_API api{ RegisterCallback };
+    GW2Load_API_Internal api{ RegisterCallback };
 
     auto onError = [&]<typename... Args>(spdlog::format_string_t<Args...> fmt, Args&& ...args) {
         return [&] {
@@ -278,20 +286,20 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                 return false;
             }
 
-            addon.getAddonDesc = reinterpret_cast<GW2Load_GetAddonDescription>(GetProcAddress(addon.handle, "GW2Load_GetAddonDescription"));
+            addon.getAddonDesc = reinterpret_cast<GW2Load_GetAddonDescription_t>(GetProcAddress(addon.handle, "GW2Load_GetAddonDescription"));
             if (!addon.getAddonDesc)
                 return onError("Addon {} does not properly export GetAddonDescription, unloading...", addon.file.string())();
 
             if (addon.hasOnLoad)
-                addon.onLoad = reinterpret_cast<GW2Load_OnLoad>(GetProcAddress(addon.handle, "GW2Load_OnLoad"));
+                addon.onLoad = reinterpret_cast<GW2Load_OnLoad_t>(GetProcAddress(addon.handle, "GW2Load_OnLoad"));
             if (addon.hasOnLoadLauncher)
-                addon.onLoadLauncher = reinterpret_cast<GW2Load_OnLoadLauncher>(GetProcAddress(addon.handle, "GW2Load_OnLoadLauncher"));
+                addon.onLoadLauncher = reinterpret_cast<GW2Load_OnLoadLauncher_t>(GetProcAddress(addon.handle, "GW2Load_OnLoadLauncher"));
             if (addon.hasOnClose)
-                addon.onClose = reinterpret_cast<GW2Load_OnClose>(GetProcAddress(addon.handle, "GW2Load_OnClose"));
+                addon.onClose = reinterpret_cast<GW2Load_OnClose_t>(GetProcAddress(addon.handle, "GW2Load_OnClose"));
             if (addon.hasOnOutdated)
-                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonDescriptionVersionOutdated>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
+                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonDescriptionVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
             if (addon.hasUpdateCheck)
-                addon.updateCheck = reinterpret_cast<GW2Load_UpdateCheck>(GetProcAddress(addon.handle, "GW2Load_UpdateCheck"));
+                addon.updateCheck = reinterpret_cast<GW2Load_UpdateCheck_t>(GetProcAddress(addon.handle, "GW2Load_UpdateCheck"));
 
             // Only do the update check on the initial addon load pass, not on subsequent calls to InitializeAddon from the self-update process
             if (addon.updateCheck && !g_AddonsInitialized)
@@ -397,7 +405,8 @@ void UpdateAddon(AddonData* addon)
         std::scoped_lock lock(g_DelayedAddonsTimesMutex);
         g_DelayedAddonsTimes.push_back(std::chrono::system_clock::now());
         auto dt = g_DelayedAddonsTimes.back() - g_DelayedAddonsTimes[g_DelayedAddonsTimes.size() - 2];
-        spdlog::info("Update check for addon {} complete, took {}.", g_UpdateAddon->file.string(), dt);
+        spdlog::info("Update check for addon {} complete, took {}.", g_UpdateAddon->file.string(),
+            static_cast<float>(std::chrono::duration_cast<std::chrono::milliseconds>(dt).count()) / 1000.f);
         g_UpdateAddon = nullptr;
         });
 
@@ -464,12 +473,18 @@ void InitializeAddons(bool launcher)
         InitializeAddon(addon, launcher);
     g_AddonsInitialized = true;
 
-    if (!g_DelayedAddons.empty())
+    if (launcher && !g_DelayedAddons.empty())
     {
         g_DelayedAddonsManagerFuture = std::async(std::launch::async, [] {
             for (auto* addon : g_DelayedAddons)
                 UpdateAddon(addon);
             });
+    }
+
+    if (!launcher)
+    {
+        for (auto&& [i, cbs] : g_Callbacks)
+            std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
     }
 }
 
@@ -515,7 +530,7 @@ void Quit(HWND hwnd)
 void LauncherClosing(HWND hwnd)
 {
     using namespace std::chrono_literals;
-    if (!g_DelayedAddonsManagerFuture.valid() && g_DelayedAddonsManagerFuture.wait_for(5s) != std::future_status::ready)
+    if (g_DelayedAddonsManagerFuture.valid() && g_DelayedAddonsManagerFuture.wait_for(5s) != std::future_status::ready)
     {
         std::scoped_lock lock(g_DelayedAddonsTimesMutex);
 
@@ -536,7 +551,7 @@ void LauncherClosing(HWND hwnd)
 
         const auto msg = [&] {
             if (faultyAddon)
-                std::format("The addon {} took too long to update and may have crashed. For safety reasons, the game will now close.", faultyAddon->file.string());
+                return std::format("The addon {} took too long to update and may have crashed. For safety reasons, the game will now close.", faultyAddon->file.string());
             else
                 return std::string("One or more addons took too long to update. For safety reasons, the game will now close.");
             }();

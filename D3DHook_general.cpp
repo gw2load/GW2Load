@@ -104,6 +104,8 @@ void ShutdownD3DObjects(HWND hWnd)
 	}
 
 	g_AssociatedWindow = nullptr;
+
+	RestoreVTables();
 }
 
 IDXGISwapChain1* GetSwapChain1(IDXGISwapChain* sc)

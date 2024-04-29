@@ -35,11 +35,12 @@ struct PriorityCallback
     int priority;
     GW2Load_GenericCallback callback;
 };
-static std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
+extern std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
 
 template<GW2Load_HookedFunction Function, GW2Load_CallbackPoint Point, typename... Args>
 void InvokeAPIHooks(Args&& ...args)
 {
-    for (auto&& [priority, cb] : g_Callbacks[GetIndex(Function, Point)])
+    constexpr auto idx = GetIndex(Function, Point);
+    for (auto&& [priority, cb] : g_Callbacks[idx])
         reinterpret_cast<void(*)(Args&&...)>(cb)(std::forward<Args>(args)...);
 }

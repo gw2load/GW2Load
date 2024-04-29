@@ -1,4 +1,6 @@
 #include "D3DHook.h"
+#include <variant>
+#include "Utils.h"
 
 #define CINTERFACE
 #define D3D11_NO_HELPERS
@@ -84,9 +86,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
 	return returnValue;
 }
 
-std::unordered_set<IDXGISwapChainVtbl*> g_SwapChainTables;
-std::unordered_set<ID3D11DeviceVtbl*> g_DeviceTables;
-std::unordered_set<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
+std::vector<std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>> g_SwapChainTables;
+std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
+std::vector<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
 
 void OverwriteVTables(void* sc, void* dev, void* ctx)
 {
@@ -94,10 +96,13 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;
 	auto* contextVT = reinterpret_cast<ID3D11DeviceContext*>(ctx)->lpVtbl;
 
-	if (!g_SwapChainTables.contains(swapChainVT))
+	if (std::ranges::find(g_SwapChainTables, swapChainVT,
+		[](const auto& v) { auto* p = std::get_if<IDXGISwapChainVtbl*>(&v); return p ? *p : nullptr; }) == g_SwapChainTables.end())
 	{
 		HookFunction(swapChainVT->Present, HkSwapChainPresent, RealSwapChainPresent);
 		HookFunction(swapChainVT->ResizeBuffers, HkSwapChainResizeBuffers, RealSwapChainResizeBuffers);
+
+		g_SwapChainTables.push_back(swapChainVT);
 
 		auto* sc1 = GetSwapChain1(reinterpret_cast<IDXGISwapChain*>(sc));
 		if (sc1)
@@ -105,6 +110,8 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 			auto* swapChain1VT = sc1->lpVtbl;
 			HookFunction(swapChain1VT->Present1, HkSwapChain1Present1, RealSwapChain1Present1);
 			swapChain1VT->Release(sc1);
+
+			g_SwapChainTables.push_back(swapChain1VT);
 		}
 
 		auto* sc3 = GetSwapChain3(reinterpret_cast<IDXGISwapChain*>(sc));
@@ -113,8 +120,34 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 			auto* swapChain3VT = sc3->lpVtbl;
 			HookFunction(swapChain3VT->ResizeBuffers1, HkSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
 			swapChain3VT->Release(sc3);
+
+			g_SwapChainTables.push_back(swapChain3VT);
 		}
 
-		g_SwapChainTables.insert(swapChainVT);
+	}
+}
+
+void RestoreVTables()
+{
+	for (auto& vt : g_SwapChainTables)
+	{
+		if (auto* p = std::get_if<IDXGISwapChainVtbl*>(&vt); p)
+		{
+			auto* swapChainVT = *p;
+			UnhookFunction(swapChainVT->Present, RealSwapChainPresent);
+			UnhookFunction(swapChainVT->ResizeBuffers, RealSwapChainResizeBuffers);
+		}
+
+		if (auto* p = std::get_if<IDXGISwapChain1Vtbl*>(&vt); p)
+		{
+			auto* swapChain1VT = *p;
+			UnhookFunction(swapChain1VT->Present1, RealSwapChain1Present1);
+		}
+
+		if (auto* p = std::get_if<IDXGISwapChain3Vtbl*>(&vt); p)
+		{
+			auto* swapChain3VT = *p;
+			UnhookFunction(swapChain3VT->ResizeBuffers1, RealSwapChain3ResizeBuffers1);
+		}
 	}
 }

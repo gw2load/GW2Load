@@ -18,7 +18,7 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     const auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
     if (nCode == HC_ACTION && message->hwnd)
     {
-        spdlog::debug("msg = {} hwnd = {:x}", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd));
+        //spdlog::debug("msg = {} hwnd = {:x}", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd));
         if (message->message == WM_CREATE)
         {
             if (!g_FirstWindowCreated)
