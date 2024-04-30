@@ -85,8 +85,8 @@ HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
 }
 
 std::vector<std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>> g_SwapChainTables;
-std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
-std::vector<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
+//std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
+//std::vector<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
 
 void OverwriteVTables(void* sc, void* dev, void* ctx)
 {
@@ -148,4 +148,5 @@ void RestoreVTables()
 			UnhookFunction(swapChain3VT->ResizeBuffers1, RealSwapChain3ResizeBuffers1);
 		}
 	}
+	g_SwapChainTables.clear();
 }

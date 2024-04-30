@@ -84,11 +84,11 @@ void ShutdownD3DObjects(HWND hWnd)
 	if (hWnd != g_AssociatedWindow)
 		return;
 
-	if (g_SwapChain)
+	if (g_DeviceContext)
 	{
-		spdlog::debug("Destroying swapchain...");
-		g_SwapChain->Release();
-		g_SwapChain = nullptr;
+		spdlog::debug("Destroying immediate context...");
+		g_DeviceContext->Release();
+		g_DeviceContext = nullptr;
 	}
 	if (g_Device)
 	{
@@ -96,11 +96,11 @@ void ShutdownD3DObjects(HWND hWnd)
 		g_Device->Release();
 		g_Device = nullptr;
 	}
-	if (g_DeviceContext)
+	if (g_SwapChain)
 	{
-		spdlog::debug("Destroying immediate context...");
-		g_DeviceContext->Release();
-		g_DeviceContext = nullptr;
+		spdlog::debug("Destroying swapchain...");
+		g_SwapChain->Release();
+		g_SwapChain = nullptr;
 	}
 
 	g_AssociatedWindow = nullptr;

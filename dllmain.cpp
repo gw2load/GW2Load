@@ -7,10 +7,10 @@
 #include <spdlog/sinks/msvc_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
+HWND g_LauncherWindow = nullptr;
 HMODULE g_MSIMG32Handle = nullptr;
 HMODULE g_LoaderModuleHandle = nullptr;
 bool g_FirstWindowCreated = false;
-bool g_LauncherClosed = false;
 bool g_MainWindowCreated = false;
 
 HHOOK g_callWndProcHook = nullptr;
@@ -18,6 +18,9 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     const auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
     if (nCode == HC_ACTION && message->hwnd)
     {
+        if (!g_LauncherWindow)
+            g_LauncherWindow = message->hwnd;
+
         //spdlog::debug("msg = {} hwnd = {:x}", GetWndProcMessageName(message->message), reinterpret_cast<std::uintptr_t>(message->hwnd));
         if (message->message == WM_CREATE)
         {
@@ -38,12 +41,12 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
         }
         else if (message->message == WM_DESTROY)
         {
-            if (g_FirstWindowCreated)
+            if (g_MainWindowCreated)
                 Quit(message->hwnd);
-            else if (!g_LauncherClosed)
+            else if (g_LauncherWindow == message->hwnd)
             {
-                LauncherClosing(message->hwnd);
-                g_LauncherClosed = true;
+                LauncherClosing(g_LauncherWindow);
+                g_LauncherWindow = nullptr;
             }
         }
     }

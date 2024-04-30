@@ -5,6 +5,7 @@
 #include <d3d11_1.h>
 #include <future>
 
+bool g_Quit = false;
 std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
 
 template<>
@@ -110,11 +111,42 @@ BOOL CALLBACK EnumSymProc(
     return true;
 }
 
-HANDLE g_CurrentProcess;
-
-std::optional<AddonData> InspectAddon(const std::filesystem::path& path)
+struct InspectionHandle
 {
-    auto dllBase = SymLoadModuleExW(g_CurrentProcess, nullptr, path.c_str(), nullptr, 0, 0, nullptr, 0);
+    HANDLE process = nullptr;
+    bool symInitialized = false;
+    InspectionHandle()
+    {
+        if (!DuplicateHandle(GetCurrentProcess(), GetCurrentProcess(), GetCurrentProcess(), &process, 0, false, DUPLICATE_SAME_ACCESS))
+        {
+            spdlog::critical("Could not acquire process handle: {}", GetLastErrorMessage());
+            return;
+        }
+
+        if (!SymInitialize(process, nullptr, false))
+        {
+            spdlog::critical("Could not initialize symbol handler: {}", GetLastErrorMessage());
+            return;
+        }
+
+        symInitialized = true;
+    }
+
+    ~InspectionHandle()
+    {
+        if (process)
+        {
+            if (symInitialized)
+                SymCleanup(process);
+
+            CloseHandle(process);
+        }
+    }
+};
+
+std::optional<AddonData> InspectAddon(const std::filesystem::path& path, InspectionHandle& inspectHandle)
+{
+    auto dllBase = SymLoadModuleExW(inspectHandle.process, nullptr, path.c_str(), nullptr, 0, 0, nullptr, 0);
     if (dllBase == 0)
     {
         spdlog::warn("Could not load module {}: {}", path.string(), GetLastErrorMessage());
@@ -123,13 +155,13 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path)
 
     AddonData data{ path };
 
-    if (!SymEnumSymbols(g_CurrentProcess, dllBase, "GW2Load_*", EnumSymProc, &data))
+    if (!SymEnumSymbols(inspectHandle.process, dllBase, "GW2Load_*", EnumSymProc, &data))
     {
         spdlog::warn("Could not enumerate symbols for {}: {}", data.file.string(), GetLastErrorMessage());
         return std::nullopt;
     }
 
-    if (!SymUnloadModule(g_CurrentProcess, dllBase))
+    if (!SymUnloadModule(inspectHandle.process, dllBase))
         spdlog::warn("Could not unload module {}: {}", data.file.string(), GetLastErrorMessage());
 
     if (data.hasGetAddonDesc)
@@ -140,17 +172,9 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path)
 
 void EnumerateAddons()
 {
-    if (!DuplicateHandle(GetCurrentProcess(), GetCurrentProcess(), GetCurrentProcess(), &g_CurrentProcess, 0, false, DUPLICATE_SAME_ACCESS))
-    {
-        spdlog::critical("Could not acquire process handle: {}", GetLastErrorMessage());
+    InspectionHandle handle;
+    if (!handle.symInitialized)
         return;
-    }
-
-    if (!SymInitialize(g_CurrentProcess, nullptr, false))
-    {
-        spdlog::critical("Could not initialize symbol handler: {}", GetLastErrorMessage());
-        return;
-    }
 
     for (const auto& dir : std::filesystem::directory_iterator{ "addons" })
     {
@@ -163,7 +187,7 @@ void EnumerateAddons()
             if (!file.is_regular_file()) continue;
             if (!file.path().has_extension() || ToLower(file.path().extension().string()) != ".dll") continue;
 
-            auto data = InspectAddon(file.path());
+            auto data = InspectAddon(file.path(), handle);
             if(data)
                 g_Addons.push_back(std::move(*data));
         }
@@ -452,7 +476,11 @@ void UpdateAddon(AddonData* addon)
                 fclose(file);
             }
 
-            auto newAddon = InspectAddon(addon->file);
+            InspectionHandle handle;
+            if (!handle.symInitialized)
+                return;
+
+            auto newAddon = InspectAddon(addon->file, handle);
             if (newAddon)
                 *addon = *newAddon; // FIXME: Does this correctly update g_DelayedAddons and g_Addons?
             else
@@ -522,6 +550,10 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
 
 void Quit(HWND hwnd)
 {
+    if (g_Quit) // Avoid quitting twice
+        return;
+
+    g_Quit = true;
     ShutdownAddons();
     ShutdownD3DObjects(hwnd);
 }
@@ -562,7 +594,4 @@ void LauncherClosing(HWND hwnd)
 
     for (auto&& [i, cbs] : g_Callbacks)
         std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
-
-    SymCleanup(g_CurrentProcess);
-    CloseHandle(g_CurrentProcess);
 }
