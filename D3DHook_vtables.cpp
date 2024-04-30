@@ -1,11 +1,9 @@
+#define CINTERFACE
+#define D3D11_NO_HELPERS
+
 #include "D3DHook.h"
 #include <variant>
 #include "Utils.h"
-
-#define CINTERFACE
-#define D3D11_NO_HELPERS
-#include <d3d11_1.h>
-#include <dxgi1_6.h>
 
 void HookFunction(auto& function, const auto& hook, auto& backup)
 requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<std::add_pointer_t<decltype(hook)>>>
@@ -34,9 +32,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
 	UINT Flags)
 {
 	InitializeD3DObjects(This);
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall>(This);
+	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(This);
 	auto returnValue = RealSwapChainPresent(This, SyncInterval, Flags);
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall>(This);
+	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(This);
 	return returnValue;
 }
 
@@ -48,9 +46,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
 	const DXGI_PRESENT_PARAMETERS* pPresentParameters)
 {
 	InitializeD3DObjects(reinterpret_cast<IDXGISwapChain*>(This));
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall>(This);
+	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(Downcast(This));
 	auto returnValue = RealSwapChain1Present1(This, SyncInterval, PresentFlags, pPresentParameters);
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall>(This);
+	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(Downcast(This));
 	return returnValue;
 }
 
@@ -63,9 +61,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
 	DXGI_FORMAT NewFormat,
 	UINT SwapChainFlags)
 {
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall>(This, Width, Height, NewFormat);
+	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall, GW2Load_ResizeBuffersCallback>(This, Width, Height, NewFormat);
 	auto returnValue = RealSwapChainResizeBuffers(This, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall>(This, Width, Height, NewFormat);
+	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall, GW2Load_ResizeBuffersCallback>(This, Width, Height, NewFormat);
 	return returnValue;
 }
 
@@ -80,9 +78,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
 	const UINT* pCreationNodeMask,
 	IUnknown* const* ppPresentQueue)
 {
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall>(This, Width, Height, Format);
+	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, Format);
 	auto returnValue = RealSwapChain3ResizeBuffers1(This, BufferCount, Width, Height, Format, SwapChainFlags, pCreationNodeMask, ppPresentQueue);
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall>(This, Width, Height, Format);
+	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, Format);
 	return returnValue;
 }
 

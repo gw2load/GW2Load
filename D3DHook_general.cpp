@@ -125,3 +125,13 @@ IDXGISwapChain3* GetSwapChain3(IDXGISwapChain* sc)
 	else
 		return nullptr;
 }
+
+IDXGISwapChain* Downcast(IDXGISwapChain1* swc)
+{
+	return swc;
+}
+
+IDXGISwapChain* Downcast(IDXGISwapChain3* swc)
+{
+	return swc;
+}

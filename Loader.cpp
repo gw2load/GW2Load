@@ -2,7 +2,6 @@
 #include "D3DHook.h"
 #include "Utils.h"
 #include <dbghelp.h>
-#include "api.h"
 #include <d3d11_1.h>
 #include <future>
 

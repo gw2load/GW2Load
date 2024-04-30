@@ -114,8 +114,6 @@ BOOL APIENTRY DllMain(HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH:
         g_LoaderModuleHandle = hModule;
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
         break;
     case DLL_PROCESS_DETACH:
         if (g_MSIMG32Handle)
@@ -128,6 +126,8 @@ BOOL APIENTRY DllMain(HMODULE hModule,
             UnhookWindowsHookEx(g_callWndProcHook);
             g_callWndProcHook = nullptr;
         }
+        break;
+    default:
         break;
     }
     return TRUE;

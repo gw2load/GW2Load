@@ -81,6 +81,9 @@ enum class GW2Load_CallbackPoint : unsigned int
 };
 
 using GW2Load_GenericCallback = void(__cdecl*)(); // Used as a placeholder for the actual function signature, see enum
+using GW2Load_PresentCallback = void(__cdecl*)(IDXGISwapChain* swapChain);
+using GW2Load_ResizeBuffersCallback = void(__cdecl*)(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
+
 using GW2Load_RegisterCallback = void(__cdecl*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
 using GW2Load_UpdateCallback = void(__cdecl*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 

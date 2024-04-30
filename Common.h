@@ -16,6 +16,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <d3d11_1.h>
+#include <dxgi1_6.h>
 #include "api.h"
 
 constexpr unsigned int PrintDescVersion(int v)
@@ -37,10 +39,10 @@ struct PriorityCallback
 };
 extern std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
 
-template<GW2Load_HookedFunction Function, GW2Load_CallbackPoint Point, typename... Args>
+template<GW2Load_HookedFunction Function, GW2Load_CallbackPoint Point, typename CallbackType, typename... Args>
 void InvokeAPIHooks(Args&& ...args)
 {
     constexpr auto idx = GetIndex(Function, Point);
     for (auto&& [priority, cb] : g_Callbacks[idx])
-        reinterpret_cast<void(*)(Args&&...)>(cb)(std::forward<Args>(args)...);
+        reinterpret_cast<CallbackType>(cb)(std::forward<Args>(args)...);
 }

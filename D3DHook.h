@@ -18,3 +18,6 @@ extern struct IDXGISwapChain* g_SwapChain;
 extern struct ID3D11Device* g_Device;
 extern struct ID3D11DeviceContext* g_DeviceContext;
 extern HWND g_AssociatedWindow;
+
+IDXGISwapChain* Downcast(IDXGISwapChain1* swc);
+IDXGISwapChain* Downcast(IDXGISwapChain3* swc);
