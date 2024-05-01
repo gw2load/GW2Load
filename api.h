@@ -1,8 +1,25 @@
 #pragma once
 
-// GW2Load API Overview
+/*
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
+*
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
+*
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+*/
 
 /*
+************************
+* GW2Load API Overview *
+************************
 *
 * 1. Folder structure
 *
@@ -25,8 +42,9 @@
 *
 * For advanced use only:
 * bool GW2Load_OnAddonDescriptionVersionOutdated(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
-* This will only be called if GW2Load's addon description version is *older* than the addon's, allowing the addon to adjust its behavior for the outdated loader.
-* The loader will handle backwards compatibility automatically (e.g., an addon using version 1 being loaded by a loader with version 2).
+* This will only be called if GW2Load's addon description version is *older* than the addon's,
+* allowing the addon to adjust its behavior for the outdated loader. The loader will handle backwards compatibility automatically
+* (e.g., an addon using version 1 being loaded by a loader with version 2).
 *
 * using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 * void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
@@ -47,6 +65,8 @@
 *
 * As per Microsoft guidelines, do *NOT* run complex initialization in DllMain. Use one of the OnLoad events instead.
 * Similarly, it is recommended to run cleanup operations in the OnClose event.
+*
+* N.B. Remember to declare all of your exports extern "C"!
 *
 */
 
@@ -106,9 +126,9 @@ struct GW2Load_UpdateAPI
     GW2Load_UpdateCallback updateCallback;
 };
 
-using GW2Load_GetAddonDescription_t = bool(*)(GW2Load_AddonDescription* desc);
-using GW2Load_OnLoad_t = bool(*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
-using GW2Load_OnLoadLauncher_t = bool(*)(GW2Load_API* api);
-using GW2Load_OnClose_t = void(*)();
-using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
-using GW2Load_UpdateCheck_t = void(*)(GW2Load_UpdateAPI* api);
+using GW2Load_GetAddonDescription_t = bool(__cdecl*)(GW2Load_AddonDescription* desc);
+using GW2Load_OnLoad_t = bool(__cdecl*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
+using GW2Load_OnLoadLauncher_t = bool(__cdecl*)(GW2Load_API* api);
+using GW2Load_OnClose_t = void(__cdecl*)();
+using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(__cdecl*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
+using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateAPI* api);
