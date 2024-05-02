@@ -27,12 +27,23 @@
 * GW2Load will look for addons in subfolders of "./addons". DLLs found directly in the addons folder will be ignored.
 * Subfolders starting with "." or "_" characters will also be skipped.
 * Inside the subfolders, all DLLs will be checked for GW2Load exports. This is done *without* executing any code in the DLL.
+* 
+* 2. Third-party application compatibility
+* 
+* There are numerous circumstances in which a third-party application such as an addon manager or a game launcher
+* may want to interact with addons in a limited capacity. This API is designed such that certain exports (see section below)
+* may be called by standalone applications. As such, it is crucial that addons using this API:
+* - Do not run code which may produce side-effects in DllMain
+* - Do not misuse flagged exports to perform tasks other than those clearly indicated by the API documentation
+* Failure to respect these constraints may cause unexpected issues such as addons getting half-loaded by an addon manager.
 *
-* 2. Exports
+* 3. Exports
 *
 * Only one export is required to be recognized as an addon:
 * bool GW2Load_GetAddonDescription(GW2Load_AddonDescription* desc);
 * The return value will be checked and addon loading will be aborted if it is false.
+* Do NOT do any initialization in GW2Load_GetAddonDescription!
+* This export may be called by external applications (e.g., addon managers).
 *
 * Additional exports will be detected at this time as well:
 * bool GW2Load_OnLoad(GW2Load_API* api, IDXGISwapChain* swapChain, ID3D11Device* device, ID3D11DeviceContext* context);
@@ -63,7 +74,7 @@
 * After all DLLs have been processed, they will be reloaded properly (via LoadLibrary) at the earliest opportunity.
 * This is also when GetAddonDescription and UpdateCheck (if defined) will be invoked.
 *
-* As per Microsoft guidelines, do *NOT* run complex initialization in DllMain. Use one of the OnLoad events instead.
+* Do *NOT* run initialization in DllMain. Use one of the OnLoad events instead.
 * Similarly, it is recommended to run cleanup operations in the OnClose event.
 *
 * N.B. Remember to declare all of your exports extern "C"!
