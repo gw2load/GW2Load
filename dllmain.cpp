@@ -75,22 +75,48 @@ FUNC_EXPORT(TransparentBlt, BOOL, (HDC hdcDest, int xoriginDest, int yoriginDest
 
 std::shared_ptr<spdlog::logger> g_Logger;
 
+struct LANGANDCODEPAGE
+{
+    WORD wLanguage;
+    WORD wCodePage;
+};
+
+bool ValidateExecutable()
+{
+    wchar_t exeName[MAX_PATH];
+    GetModuleFileNameW(nullptr, exeName, sizeof(exeName));
+    DWORD verHandle;
+    DWORD verSize = GetFileVersionInfoSizeW(exeName, &verHandle);
+    if (verSize == 0)
+        return false;
+
+    std::vector<unsigned char> verData(verSize);
+    if (!GetFileVersionInfoW(exeName, verHandle, verSize, verData.data()))
+        return false;
+
+    const LANGANDCODEPAGE* lpTranslate = nullptr;
+    const LANGANDCODEPAGE fallbackTranslate{ 0x0409, 0x04B0 };
+
+    UINT cbTranslate;
+    if (!VerQueryValueW(verData.data(), L"\\VarFileInfo\\Translation", (void**)&lpTranslate, &cbTranslate))
+    {
+        lpTranslate = &fallbackTranslate;
+    }
+
+    unsigned int fileInfoSize;
+    wchar_t* fileInfoBuf;
+    const auto query = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\ProductName", lpTranslate->wLanguage, lpTranslate->wCodePage);
+    if (!VerQueryValueW(verData.data(), query.c_str(), (void**)&fileInfoBuf, &fileInfoSize) || fileInfoSize == 0)
+        return false;
+
+    if (std::wstring_view{ fileInfoBuf } != L"Guild Wars 2")
+        return false;
+
+    return true;
+}
+
 void Init()
 {
-    std::filesystem::create_directories("addons/_logs/GW2Load");
-    auto outputLogger = std::make_shared<spdlog::sinks::msvc_sink_st>(true);
-    outputLogger->set_pattern("[GW2Load>%l|%T.%f] %v");
-    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_st>("addons/_logs/GW2Load/GW2Load.log", 100_kb, 10, true);
-    fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
-    g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list { outputLogger, fileLogger });
-    spdlog::set_default_logger(g_Logger);
-
-#ifdef _DEBUG
-    spdlog::set_level(spdlog::level::trace);
-#else
-    spdlog::set_level(spdlog::level::warn);
-#endif
-
     PWSTR path;
     SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
     std::filesystem::path p(path);
@@ -102,6 +128,23 @@ void Init()
     FUNC_LOAD(GradientFill);
     FUNC_LOAD(TransparentBlt);
     CoTaskMemFree(path);
+
+    if (!ValidateExecutable())
+        return;
+
+    std::filesystem::create_directories("addons/_logs/GW2Load");
+    auto outputLogger = std::make_shared<spdlog::sinks::msvc_sink_st>(true);
+    outputLogger->set_pattern("[GW2Load>%l|%T.%f] %v");
+    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_st>("addons/_logs/GW2Load/GW2Load.log", 100_kb, 10, true);
+    fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
+    g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
+    spdlog::set_default_logger(g_Logger);
+
+#ifdef _DEBUG
+    spdlog::set_level(spdlog::level::trace);
+#else
+    spdlog::set_level(spdlog::level::warn);
+#endif
 
     if(!g_callWndProcHook)
         g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, nullptr, GetCurrentThreadId());
