@@ -42,6 +42,7 @@
 * Only one export is required to be recognized as an addon:
 * bool GW2Load_GetAddonDescription(GW2Load_AddonDescription* desc);
 * The return value will be checked and addon loading will be aborted if it is false.
+* The returned name string must remain valid memory until the addon's first OnLoad callback is invoked.
 * Do NOT do any initialization in GW2Load_GetAddonDescription!
 * This export may be called by external applications (e.g., addon managers).
 *
@@ -86,11 +87,11 @@ inline static constexpr unsigned int GW2Load_CurrentAddonDescriptionVersion = GW
 
 struct GW2Load_AddonDescription
 {
-    unsigned int descriptionVersion; // Always set to GW2Load_CurrentAddonDescriptionVersion
-    unsigned int majorAddonVersion;
-    unsigned int minorAddonVersion;
-    unsigned int patchAddonVersion;
-    const char* name;
+    unsigned int descriptionVersion = 0; // Always set to GW2Load_CurrentAddonDescriptionVersion
+    unsigned int majorAddonVersion = 0;
+    unsigned int minorAddonVersion = 0;
+    unsigned int patchAddonVersion = 0;
+    const char* name = nullptr;
 };
 
 enum class GW2Load_HookedFunction : unsigned int
@@ -143,3 +144,38 @@ using GW2Load_OnLoadLauncher_t = bool(__cdecl*)(GW2Load_API* api);
 using GW2Load_OnClose_t = void(__cdecl*)();
 using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(__cdecl*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
 using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateAPI* api);
+
+/*
+* 4. Standalone API
+* 
+* GW2Load also offers a simple standalone C API to enumerate compatible addons in a directory and return basic information about them.
+* This API can be accessed as if the loader were a standard library.
+* 
+*/
+
+#ifdef GW2LOAD
+#define GW2LOAD_EXPORT __declspec(dllexport)
+#else
+#define GW2LOAD_EXPORT __declspec(dllimport)
+#endif
+
+
+struct GW2Load_EnumeratedAddon
+{
+    const char* path;
+    GW2Load_AddonDescription description;
+};
+
+struct GW2Load_LoaderVersion
+{
+    unsigned int descriptionVersion = 0; // Always set to GW2Load_CurrentAddonDescriptionVersion
+    unsigned int majorAddonVersion = 0;
+    unsigned int minorAddonVersion = 0;
+    unsigned int patchAddonVersion = 0;
+};
+
+extern "C"
+{
+    GW2LOAD_EXPORT GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count);
+    GW2LOAD_EXPORT const GW2Load_LoaderVersion* GW2Load_GetLoaderVersion();
+}

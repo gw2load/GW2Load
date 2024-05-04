@@ -46,3 +46,5 @@ void InvokeAPIHooks(Args&& ...args)
     for (auto&& [priority, cb] : g_Callbacks[idx])
         reinterpret_cast<CallbackType>(cb)(std::forward<Args>(args)...);
 }
+
+bool IsAttachedToGame();

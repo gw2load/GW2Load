@@ -73,6 +73,7 @@ struct AddonData
     GW2Load_UpdateCheck_t updateCheck = nullptr;
 
     GW2Load_AddonDescription desc;
+    std::string name;
 
     std::vector<unsigned char> updateData;
     bool updateDataIsFileName = false;
@@ -170,13 +171,17 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
         return std::nullopt;
 }
 
-void EnumerateAddons()
+void EnumerateAddons(const std::filesystem::path& addonsPath)
 {
     InspectionHandle handle;
     if (!handle.symInitialized)
         return;
 
-    for (const auto& dir : std::filesystem::directory_iterator{ "addons" })
+    std::error_code ec;
+    if (!std::filesystem::is_directory(addonsPath, ec))
+        return;
+
+    for (const auto& dir : std::filesystem::directory_iterator{ addonsPath })
     {
         if (!dir.is_directory()) continue;
         auto dirName = dir.path().filename().string();
@@ -192,6 +197,31 @@ void EnumerateAddons()
                 g_Addons.push_back(std::move(*data));
         }
     }
+}
+
+std::vector<GW2Load_EnumeratedAddon> g_EnumeratedAddons;
+std::vector<std::string> g_EnumeratedAddonPaths;
+extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count)
+{
+    if (!IsAttachedToGame())
+    {
+        g_Addons.clear();
+        EnumerateAddons(directory);
+    }
+
+    g_EnumeratedAddons.clear();
+    g_EnumeratedAddonPaths.clear();
+    g_EnumeratedAddons.reserve(g_Addons.size());
+    g_EnumeratedAddonPaths.reserve(g_Addons.size());
+
+    for (const auto& addon : g_Addons)
+    {
+        g_EnumeratedAddonPaths.push_back(addon.file.string());
+        g_EnumeratedAddons.emplace_back(g_EnumeratedAddonPaths.back().c_str(), addon.desc);
+    }
+
+    *count = static_cast<unsigned int>(g_EnumeratedAddons.size());
+    return g_EnumeratedAddons.data();
 }
 
 AddonData* g_CallbackAddon = nullptr;
@@ -335,6 +365,8 @@ bool InitializeAddon(AddonData& addon, bool launcher)
         if (!SafeCall([&] {
             if (!addon.getAddonDesc(&addon.desc))
                 return onError("Addon {} refused to load, unloading...", addon.file.string())();
+            addon.name = addon.desc.name;
+            addon.desc.name = addon.name.c_str();
             return true;
             }, onError("Error in addon {} GetAddonDescription, unloading...", addon.file.string())))
         {
@@ -537,7 +569,7 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
     switch (type)
     {
     case InitializationType::InLauncher:
-        EnumerateAddons();
+        EnumerateAddons("addons");
         InitializeAddons(true);
         break;
     case InitializationType::BeforeFirstWindow:

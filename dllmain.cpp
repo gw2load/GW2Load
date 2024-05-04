@@ -53,6 +53,11 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(0, nCode, wParam, lParam);
 }
 
+bool IsAttachedToGame()
+{
+    return g_callWndProcHook != nullptr;
+}
+
 void Init();
 
 #define FUNC_EXPORT(Name_, Return_, Arguments_, Parameters_) \
@@ -177,4 +182,11 @@ BOOL APIENTRY DllMain(HMODULE hModule,
         break;
     }
     return TRUE;
+}
+
+GW2Load_LoaderVersion g_Version{ GW2Load_CurrentAddonDescriptionVersion, 0, 0, 1 };
+
+extern "C" __declspec(dllexport) const GW2Load_LoaderVersion* GW2Load_GetLoaderVersion()
+{
+    return &g_Version;
 }
