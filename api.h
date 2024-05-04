@@ -176,6 +176,7 @@ struct GW2Load_LoaderVersion
 
 extern "C"
 {
-    GW2LOAD_EXPORT GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count);
+    // If allowDisabled is true, addons ending in a .dll.disabled extension will also be returned
+    GW2LOAD_EXPORT GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, bool allowDisabled);
     GW2LOAD_EXPORT const GW2Load_LoaderVersion* GW2Load_GetLoaderVersion();
 }

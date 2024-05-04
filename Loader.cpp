@@ -171,7 +171,7 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
         return std::nullopt;
 }
 
-void EnumerateAddons(const std::filesystem::path& addonsPath)
+void EnumerateAddons(const std::filesystem::path& addonsPath, bool allowDisabled)
 {
     InspectionHandle handle;
     if (!handle.symInitialized)
@@ -190,7 +190,9 @@ void EnumerateAddons(const std::filesystem::path& addonsPath)
         for (const auto& file : std::filesystem::directory_iterator{ dir.path() })
         {
             if (!file.is_regular_file()) continue;
-            if (!file.path().has_extension() || ToLower(file.path().extension().string()) != ".dll") continue;
+            if (!file.path().has_extension()) continue;
+            auto ext = ToLower(file.path().extension().string());
+            if(ext != ".dll" && (!allowDisabled || ext != ".dll.disabled")) continue;
 
             auto data = InspectAddon(file.path(), handle);
             if(data)
@@ -201,12 +203,12 @@ void EnumerateAddons(const std::filesystem::path& addonsPath)
 
 std::vector<GW2Load_EnumeratedAddon> g_EnumeratedAddons;
 std::vector<std::string> g_EnumeratedAddonPaths;
-extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count)
+extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, bool allowDisabled)
 {
     if (!IsAttachedToGame())
     {
         g_Addons.clear();
-        EnumerateAddons(directory);
+        EnumerateAddons(directory, allowDisabled);
     }
 
     g_EnumeratedAddons.clear();
@@ -569,7 +571,7 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
     switch (type)
     {
     case InitializationType::InLauncher:
-        EnumerateAddons("addons");
+        EnumerateAddons("addons", false);
         InitializeAddons(true);
         break;
     case InitializationType::BeforeFirstWindow:
