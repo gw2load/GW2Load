@@ -30,4 +30,4 @@ if($dirty)
 $gitVerStr = $latestTag + $dirtySuffix
 
 Write-Output "#define GIT_VER $gitVer
-#define GIT_VER_STR ""$gitVerStr""" > version.h
+#define GIT_VER_STR ""$gitVerStr\0""" > version.h

@@ -82,6 +82,9 @@
     <PostBuildEvent>
       <Command>copy "$(TargetPath)" "$(GW2_INSTALL_DIR)"</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>pwsh $(SolutionDir)get_version.ps1</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -108,6 +111,9 @@
     <PostBuildEvent>
       <Command>copy "$(TargetPath)" "$(GW2_INSTALL_DIR)"</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>pwsh $(SolutionDir)get_version.ps1</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="api.h" />
