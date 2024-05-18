@@ -27,49 +27,44 @@
 * GW2Load will look for addons in subfolders of "./addons". DLLs found directly in the addons folder will be ignored.
 * Subfolders starting with "." or "_" characters will also be skipped.
 * Inside the subfolders, all DLLs will be checked for GW2Load exports. This is done *without* executing any code in the DLL.
-* 
-* 2. Third-party application compatibility
-* 
-* There are numerous circumstances in which a third-party application such as an addon manager or a game launcher
-* may want to interact with addons in a limited capacity. This API is designed such that certain exports (see section below)
-* may be called by standalone applications. As such, it is crucial that addons using this API:
-* - Do not run code which may produce side-effects in DllMain
-* - Do not misuse flagged exports to perform tasks other than those clearly indicated by the API documentation
-* Failure to respect these constraints may cause unexpected issues such as addons getting half-loaded by an addon manager.
 *
-* 3. Exports
+* 2. Requirements
+* 
+* The primary requirement to be recognized as an addon is a valid VERSIONINFO block with, at minimum:
+*   - A valid ProductName (1st chance) or FileDescription (2nd chance) string field, which will be interpreted as the addon's name
+*   - A valid PRODUCTVERSION (1st chance) or FILEVERSION (2nd chance) numerical field, which will be interpreted as the addon's version
+* Additionally, ProductVersion (1st chance) or FileVersion (2nd chance) string fields will also be inspected and used for display (e.g., in logs),
+* otherwise the version will fall back to the numerical field value (xx.yy.zz.ww).
 *
 * Only one export is required to be recognized as an addon:
-* bool GW2Load_GetAddonDescription(GW2Load_AddonDescription* desc);
-* The return value will be checked and addon loading will be aborted if it is false.
-* The returned name string must remain valid memory until the addon's first OnLoad callback is invoked.
-* Do NOT do any initialization in GW2Load_GetAddonDescription!
-* This export may be called by external applications (e.g., addon managers).
+*   unsigned int GW2Load_GetAddonAPIVersion();
+*       Always return GW2Load_CurrentAddonAPIVersion in your implementation or zero to prevent loading.
+*       Do NOT do any initialization in GW2Load_GetAddonAPIVersion!
 *
 * Additional exports will be detected at this time as well:
-* bool GW2Load_OnLoad(GW2Load_API* api, IDXGISwapChain* swapChain, ID3D11Device* device, ID3D11DeviceContext* context);
-* bool GW2Load_OnLoadLauncher(GW2Load_API* api);
-* The return value for either of these will be checked and the addon will be unloaded if it is false.
-* void GW2Load_OnClose();
+*   bool GW2Load_OnLoad(GW2Load_API* api, IDXGISwapChain* swapChain, ID3D11Device* device, ID3D11DeviceContext* context);
+*   bool GW2Load_OnLoadLauncher(GW2Load_API* api);
+*       The return value for either of these will be checked and the addon will be unloaded if it is false.
+*   void GW2Load_OnClose();
 *
 * For advanced use only:
-* bool GW2Load_OnAddonDescriptionVersionOutdated(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
-* This will only be called if GW2Load's addon description version is *older* than the addon's,
-* allowing the addon to adjust its behavior for the outdated loader. The loader will handle backwards compatibility automatically
-* (e.g., an addon using version 1 being loaded by a loader with version 2).
+*   bool GW2Load_OnAddonDescriptionVersionOutdated(unsigned int loaderVersion);
+*       This will only be called if GW2Load's addon description version is *older* than the addon's,
+*       allowing the addon to adjust its behavior for the outdated loader. The loader will handle backwards compatibility automatically
+*       (e.g., an addon using version 1 being loaded by a loader with version 2).
 *
-* using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
-* void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
-* If the export is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
-* The provided callback may be called by the addon to signal to the loader that an update is pending.
-* The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
-* Two interpretations of the data buffer are available:
-*   - If dataIsfileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
-*     The addon will be unloaded and replaced with the new file, then reloaded.
-*   - If dataIsfileName is false, then data is assumed to contain the new DLL's binary data in full.
-*     The addon will be unloaded and overwritten by the new data, then reloaded.
-* These calls are asynchronous: if UpdateCheck exists, a thread will be spawned to perform the update check for each addon in parallel.
-* All UpdateCheck threads will be killed at most two seconds after the launcher is closed and the affected addons will be unloaded.
+*   using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
+*   void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
+*       If the export is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
+*       The provided callback may be called by the addon to signal to the loader that an update is pending.
+*       The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
+*       Two interpretations of the data buffer are available:
+*         - If dataIsfileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
+*           The addon will be unloaded and replaced with the new file, then reloaded.
+*         - If dataIsfileName is false, then data is assumed to contain the new DLL's binary data in full.
+*           The addon will be unloaded and overwritten by the new data, then reloaded.
+*       These calls are asynchronous: if UpdateCheck exists, a thread will be spawned to perform the update check for each addon in parallel.
+*       All UpdateCheck threads will be killed at most two seconds after the launcher is closed and the affected addons will be unloaded.
 *
 * Once API capabilities have been determined, the DLL will be unloaded.
 * After all DLLs have been processed, they will be reloaded properly (via LoadLibrary) at the earliest opportunity.
@@ -82,17 +77,8 @@
 *
 */
 
-inline static constexpr unsigned int GW2Load_AddonDescriptionVersionMagicFlag = 0xF0CF0000;
-inline static constexpr unsigned int GW2Load_CurrentAddonDescriptionVersion = GW2Load_AddonDescriptionVersionMagicFlag | 1;
-
-struct GW2Load_AddonDescription
-{
-    unsigned int descriptionVersion = 0; // Always set to GW2Load_CurrentAddonDescriptionVersion
-    unsigned int majorAddonVersion = 0;
-    unsigned int minorAddonVersion = 0;
-    unsigned int patchAddonVersion = 0;
-    const char* name = nullptr;
-};
+inline static constexpr unsigned int GW2Load_AddonAPIVersionMagicFlag = 0xF0CF0000;
+inline static constexpr unsigned int GW2Load_CurrentAddonAPIVersion = GW2Load_AddonAPIVersionMagicFlag | 1;
 
 enum class GW2Load_HookedFunction : unsigned int
 {
@@ -138,15 +124,15 @@ struct GW2Load_UpdateAPI
     GW2Load_UpdateCallback updateCallback;
 };
 
-using GW2Load_GetAddonDescription_t = bool(__cdecl*)(GW2Load_AddonDescription* desc);
+using GW2Load_GetAddonAPIVersion_t = unsigned int(__cdecl*)();
 using GW2Load_OnLoad_t = bool(__cdecl*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
 using GW2Load_OnLoadLauncher_t = bool(__cdecl*)(GW2Load_API* api);
 using GW2Load_OnClose_t = void(__cdecl*)();
-using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(__cdecl*)(unsigned int loaderVersion, GW2Load_AddonDescription* desc);
+using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(__cdecl*)(unsigned int loaderVersion);
 using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateAPI* api);
 
 /*
-* 4. Standalone API
+* 3. Standalone API
 * 
 * GW2Load also offers a simple standalone C API to enumerate compatible addons in a directory and return basic information about them.
 * This API can be accessed as if the loader were a standard library.
@@ -159,24 +145,18 @@ using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateAPI* api);
 #define GW2LOAD_EXPORT __declspec(dllimport)
 #endif
 
-
 struct GW2Load_EnumeratedAddon
 {
     const char* path;
-    GW2Load_AddonDescription description;
-};
-
-struct GW2Load_LoaderVersion
-{
-    unsigned int descriptionVersion = 0; // Always set to GW2Load_CurrentAddonDescriptionVersion
-    unsigned int majorAddonVersion = 0;
-    unsigned int minorAddonVersion = 0;
-    unsigned int patchAddonVersion = 0;
+    const char* name;
+    unsigned short majorAddonVersion = 0;
+    unsigned short minorAddonVersion = 0;
+    unsigned short patchAddonVersion = 0;
+    unsigned short fixAddonVersion = 0;
 };
 
 extern "C"
 {
     // If allowDisabled is true, addons ending in a .dll.disabled extension will also be returned
     GW2LOAD_EXPORT GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, bool allowDisabled);
-    GW2LOAD_EXPORT const GW2Load_LoaderVersion* GW2Load_GetLoaderVersion();
 }

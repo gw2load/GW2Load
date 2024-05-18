@@ -22,7 +22,7 @@
 
 constexpr unsigned int PrintDescVersion(int v)
 {
-    return v & ~GW2Load_AddonDescriptionVersionMagicFlag;
+    return v & ~GW2Load_AddonAPIVersionMagicFlag;
 }
 
 enum class CallbackIndex : unsigned int {};

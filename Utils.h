@@ -2,6 +2,12 @@
 
 #include "Common.h"
 
+struct LANGANDCODEPAGE
+{
+    WORD wLanguage;
+    WORD wCodePage;
+};
+
 std::string_view GetWndProcMessageName(UINT msg);
 
 const void* fptr(const auto p)

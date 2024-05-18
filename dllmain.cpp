@@ -80,12 +80,6 @@ FUNC_EXPORT(TransparentBlt, BOOL, (HDC hdcDest, int xoriginDest, int yoriginDest
 
 std::shared_ptr<spdlog::logger> g_Logger;
 
-struct LANGANDCODEPAGE
-{
-    WORD wLanguage;
-    WORD wCodePage;
-};
-
 bool ValidateExecutable()
 {
     wchar_t exeName[MAX_PATH];
@@ -182,11 +176,4 @@ BOOL APIENTRY DllMain(HMODULE hModule,
         break;
     }
     return TRUE;
-}
-
-GW2Load_LoaderVersion g_Version{ GW2Load_CurrentAddonDescriptionVersion, 0, 0, 1 };
-
-extern "C" __declspec(dllexport) const GW2Load_LoaderVersion* GW2Load_GetLoaderVersion()
-{
-    return &g_Version;
 }

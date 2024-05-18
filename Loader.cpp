@@ -56,7 +56,7 @@ struct AddonData
 {
     std::filesystem::path file;
 
-    bool hasGetAddonDesc = false;
+    bool hasGetAddonAPIVersion = false;
     bool hasOnLoad = false;
     bool hasOnLoadLauncher = false;
     bool hasOnClose = false;
@@ -65,15 +65,20 @@ struct AddonData
 
     HMODULE handle = nullptr;
 
-    GW2Load_GetAddonDescription_t getAddonDesc = nullptr;
+    GW2Load_GetAddonAPIVersion_t getAddonAPIVersion = nullptr;
     GW2Load_OnLoad_t onLoad = nullptr;
     GW2Load_OnLoadLauncher_t onLoadLauncher = nullptr;
     GW2Load_OnClose_t onClose = nullptr;
     GW2Load_OnAddonDescriptionVersionOutdated_t onOutdated = nullptr;
     GW2Load_UpdateCheck_t updateCheck = nullptr;
 
-    GW2Load_AddonDescription desc;
     std::string name;
+    unsigned short majorAddonVersion = 0;
+    unsigned short minorAddonVersion = 0;
+    unsigned short patchAddonVersion = 0;
+    unsigned short fixAddonVersion = 0;
+    unsigned int apiVersion = 0;
+    std::string addonVersionString;
 
     std::vector<unsigned char> updateData;
     bool updateDataIsFileName = false;
@@ -96,8 +101,8 @@ BOOL CALLBACK EnumSymProc(
 
     std::string_view name{ pSymInfo->Name, pSymInfo->NameLen };
 
-    if (name == "GW2Load_GetAddonDescription")
-        data.hasGetAddonDesc = true;
+    if (name == "GW2Load_GetAddonAPIVersion")
+        data.hasGetAddonAPIVersion = true;
     else if (name == "GW2Load_OnLoad")
         data.hasOnLoad = true;
     else if (name == "GW2Load_OnLoadLauncher")
@@ -147,14 +152,73 @@ struct InspectionHandle
 
 std::optional<AddonData> InspectAddon(const std::filesystem::path& path, InspectionHandle& inspectHandle)
 {
+    DWORD handle;
+    auto fileVersionSize = GetFileVersionInfoSizeW(path.wstring().c_str(), &handle);
+    std::vector<unsigned char> fileVersionData(fileVersionSize);
+    if (FAILED(GetFileVersionInfoW(path.wstring().c_str(), handle, fileVersionSize, fileVersionData.data())))
+    {
+        spdlog::warn("Could not obtain file version info for module {}: {}", path.string(), GetLastErrorMessage());
+        return std::nullopt;
+    }
+
+    const VS_FIXEDFILEINFO* fileInfo = nullptr;
+    UINT fileInfoSize;
+    if (VerQueryValueW(fileVersionData.data(), L"\\", (void**)(&fileInfo), &fileInfoSize) == 0)
+    {
+        spdlog::warn("Could not obtain fixed file version info for module {}.", path.string());
+        return std::nullopt;
+    }
+
+    const auto [hiVer, loVer] = [&] {
+        if (fileInfo->dwProductVersionMS + fileInfo->dwProductVersionLS != 0)
+            return std::make_pair(fileInfo->dwProductVersionMS, fileInfo->dwProductVersionLS);
+        else
+            return std::make_pair(fileInfo->dwFileVersionMS, fileInfo->dwFileVersionLS);
+        }();
+
+    AddonData data{ path };
+
+    data.majorAddonVersion = HIWORD(hiVer);
+    data.minorAddonVersion = LOWORD(hiVer);
+    data.patchAddonVersion = HIWORD(loVer);
+    data.fixAddonVersion = LOWORD(loVer);
+
+    const LANGANDCODEPAGE* lpTranslate = nullptr;
+    UINT cbTranslate;
+    if (!VerQueryValueW(fileVersionData.data(), L"\\VarFileInfo\\Translation", (void**)&lpTranslate, &cbTranslate))
+    {
+        spdlog::warn("Could not obtain file version info translation for module {}.", path.string());
+        return std::nullopt;
+    }
+
+    char* fileInfoBuf;
+    const auto query = std::format("\\StringFileInfo\\{:04x}{:04x}\\ProductName", lpTranslate->wLanguage, lpTranslate->wCodePage);
+    if (VerQueryValueA(fileVersionData.data(), query.c_str(), (void**)&fileInfoBuf, &fileInfoSize) == 0 || fileInfoSize == 0)
+    {
+        const auto query2 = std::format("\\StringFileInfo\\{:04x}{:04x}\\FileDescription", lpTranslate->wLanguage, lpTranslate->wCodePage);
+        if (VerQueryValueA(fileVersionData.data(), query2.c_str(), (void**)&fileInfoBuf, &fileInfoSize) == 0 || fileInfoSize == 0)
+        {
+            spdlog::warn("Could not obtain addon name info for module {}.", path.string());
+            return std::nullopt;
+        }
+    }
+    data.name = fileInfoBuf;
+
+    const auto query3 = std::format("\\StringFileInfo\\{:04x}{:04x}\\ProductVersion", lpTranslate->wLanguage, lpTranslate->wCodePage);
+    if (VerQueryValueA(fileVersionData.data(), query3.c_str(), (void**)&fileInfoBuf, &fileInfoSize) != 0 && fileInfoSize > 0)
+        data.addonVersionString = fileInfoBuf;
+    else if(const auto query4 = std::format("\\StringFileInfo\\{:04x}{:04x}\\FileVersion", lpTranslate->wLanguage, lpTranslate->wCodePage);
+        VerQueryValueA(fileVersionData.data(), query4.c_str(), (void**)&fileInfoBuf, &fileInfoSize) != 0 && fileInfoSize > 0)
+        data.addonVersionString = fileInfoBuf;
+    else
+        data.addonVersionString = std::format("{}.{}.{}.{}", data.majorAddonVersion, data.minorAddonVersion, data.patchAddonVersion, data.fixAddonVersion);
+
     auto dllBase = SymLoadModuleExW(inspectHandle.process, nullptr, path.c_str(), nullptr, 0, 0, nullptr, 0);
     if (dllBase == 0)
     {
         spdlog::warn("Could not load module {}: {}", path.string(), GetLastErrorMessage());
         return std::nullopt;
     }
-
-    AddonData data{ path };
 
     if (!SymEnumSymbols(inspectHandle.process, dllBase, "GW2Load_*", EnumSymProc, &data))
     {
@@ -165,7 +229,7 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
     if (!SymUnloadModule(inspectHandle.process, dllBase))
         spdlog::warn("Could not unload module {}: {}", data.file.string(), GetLastErrorMessage());
 
-    if (data.hasGetAddonDesc)
+    if (data.hasGetAddonAPIVersion)
         return data;
     else
         return std::nullopt;
@@ -202,7 +266,7 @@ void EnumerateAddons(const std::filesystem::path& addonsPath, bool allowDisabled
 }
 
 std::vector<GW2Load_EnumeratedAddon> g_EnumeratedAddons;
-std::vector<std::string> g_EnumeratedAddonPaths;
+std::vector<std::string> g_EnumeratedAddonStrings;
 extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, bool allowDisabled)
 {
     if (!IsAttachedToGame())
@@ -212,14 +276,17 @@ extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDir
     }
 
     g_EnumeratedAddons.clear();
-    g_EnumeratedAddonPaths.clear();
+    g_EnumeratedAddonStrings.clear();
     g_EnumeratedAddons.reserve(g_Addons.size());
-    g_EnumeratedAddonPaths.reserve(g_Addons.size());
+    g_EnumeratedAddonStrings.reserve(g_Addons.size() * 2);
 
     for (const auto& addon : g_Addons)
     {
-        g_EnumeratedAddonPaths.push_back(addon.file.string());
-        g_EnumeratedAddons.emplace_back(g_EnumeratedAddonPaths.back().c_str(), addon.desc);
+        g_EnumeratedAddonStrings.push_back(addon.file.string());
+        auto* file = g_EnumeratedAddonStrings.back().c_str();
+        g_EnumeratedAddonStrings.push_back(addon.name);
+        auto* name = g_EnumeratedAddonStrings.back().c_str();
+        g_EnumeratedAddons.emplace_back(file, name, addon.majorAddonVersion, addon.minorAddonVersion, addon.patchAddonVersion, addon.fixAddonVersion);
     }
 
     *count = static_cast<unsigned int>(g_EnumeratedAddons.size());
@@ -230,21 +297,21 @@ AddonData* g_CallbackAddon = nullptr;
 void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
     spdlog::debug("Registering callback for {}: func={} priority={}, callbackPoint={}, callback={}",
-        g_CallbackAddon->desc.name, func, priority, callbackPoint, fptr(callback));
+        g_CallbackAddon->name, func, priority, callbackPoint, fptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
     {
-        spdlog::error("Error when registering callback for {}: invalid function {}.", g_CallbackAddon->desc.name, func);
+        spdlog::error("Error when registering callback for {}: invalid function {}.", g_CallbackAddon->name, func);
         return;
     }
     if (callbackPoint == GW2Load_CallbackPoint::Undefined || callbackPoint >= GW2Load_CallbackPoint::Count)
     {
-        spdlog::error("Error when registering callback for {} at function {}: invalid callback point {}.", g_CallbackAddon->desc.name, func, callbackPoint);
+        spdlog::error("Error when registering callback for {} at function {}: invalid callback point {}.", g_CallbackAddon->name, func, callbackPoint);
         return;
     }
     if (callback == nullptr)
     {
-        spdlog::error("Error when registering callback for {} at function {} point {}: null callback.", g_CallbackAddon->desc.name, func, callbackPoint);
+        spdlog::error("Error when registering callback for {} at function {} point {}: null callback.", g_CallbackAddon->name, func, callbackPoint);
         return;
     }
 
@@ -341,9 +408,9 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                 return false;
             }
 
-            addon.getAddonDesc = reinterpret_cast<GW2Load_GetAddonDescription_t>(GetProcAddress(addon.handle, "GW2Load_GetAddonDescription"));
-            if (!addon.getAddonDesc)
-                return onError("Addon {} does not properly export GetAddonDescription, unloading...", addon.file.string())();
+            addon.getAddonAPIVersion = reinterpret_cast<GW2Load_GetAddonAPIVersion_t>(GetProcAddress(addon.handle, "GW2Load_GetAddonAPIVersion"));
+            if (!addon.getAddonAPIVersion)
+                return onError("Addon {} does not properly export GetAddonAPIVersion, unloading...", addon.file.string())();
 
             if (addon.hasOnLoad)
                 addon.onLoad = reinterpret_cast<GW2Load_OnLoad_t>(GetProcAddress(addon.handle, "GW2Load_OnLoad"));
@@ -365,52 +432,50 @@ bool InitializeAddon(AddonData& addon, bool launcher)
         }
 
         if (!SafeCall([&] {
-            if (!addon.getAddonDesc(&addon.desc))
+            addon.apiVersion = addon.getAddonAPIVersion();
+            if (!addon.apiVersion)
                 return onError("Addon {} refused to load, unloading...", addon.file.string())();
-            addon.name = addon.desc.name;
-            addon.desc.name = addon.name.c_str();
             return true;
             }, onError("Error in addon {} GetAddonDescription, unloading...", addon.file.string())))
         {
             return false;
         }
 
-                switch (addon.desc.descriptionVersion)
+        switch (addon.apiVersion)
+        {
+        case GW2Load_CurrentAddonAPIVersion:
+            break;
+            // Implement backwards compatibility cases here
+        default:
+        {
+            if (addon.apiVersion < GW2Load_CurrentAddonAPIVersion)
+            {
+                return onError("Addon {} uses API version {}, which is too old for current loader API version {}, unloading...",
+                    addon.file.string(), addon.apiVersion, PrintDescVersion(GW2Load_CurrentAddonAPIVersion))();
+            }
+            else if (uint32_t addonVer = addon.apiVersion; addon.onOutdated)
+            {
+                if (!SafeCall([&] {
+                    if (addon.onOutdated(GW2Load_CurrentAddonAPIVersion))
+                    {
+                        spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility, but consider upgrading your loader.",
+                            addon.file.string(), addonVer, PrintDescVersion(GW2Load_CurrentAddonAPIVersion));
+                    }
+                    }, onError("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.name)))
                 {
-                case GW2Load_CurrentAddonDescriptionVersion:
-                    break;
-                    // Implement backwards compatibility cases here
-                default:
-                {
-                    if (addon.desc.descriptionVersion < GW2Load_CurrentAddonDescriptionVersion)
-                    {
-                        return onError("Addon {} uses API version {}, which is too old for current loader API version {}, unloading...",
-                            addon.file.string(), addon.desc.descriptionVersion, PrintDescVersion(GW2Load_CurrentAddonDescriptionVersion))();
-                    }
-                    else if (uint32_t addonVer = addon.desc.descriptionVersion; addon.onOutdated)
-                    {
-                        if (!SafeCall([&] {
-                            if (addon.onOutdated(GW2Load_CurrentAddonDescriptionVersion, &addon.desc))
-                            {
-                                spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility, but consider upgrading your loader.",
-                                    addon.file.string(), addonVer, PrintDescVersion(GW2Load_CurrentAddonDescriptionVersion));
-                            }
-                            }, onError("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.desc.name)))
-                        {
-                            return false;
-                        }
-                    }
-
-                    if (addon.desc.descriptionVersion > GW2Load_CurrentAddonDescriptionVersion)
-                    {
-                        return onError("Addon {} uses API version {}, which is newer than current loader API version {}, unloading...",
-                            addon.file.string(), addon.desc.descriptionVersion, PrintDescVersion(GW2Load_CurrentAddonDescriptionVersion))();
-                    }
+                    return false;
                 }
-                }
+            }
 
-                spdlog::info("Addon {} recognized as {} v{}.{}.{}",
-                    addon.file.string(), addon.desc.name, addon.desc.majorAddonVersion, addon.desc.minorAddonVersion, addon.desc.patchAddonVersion);
+            if (addon.apiVersion > GW2Load_CurrentAddonAPIVersion)
+            {
+                return onError("Addon {} uses API version {}, which is newer than current loader API version {}, unloading...",
+                    addon.file.string(), addon.apiVersion, PrintDescVersion(GW2Load_CurrentAddonAPIVersion))();
+            }
+        }
+        }
+
+        spdlog::info("Addon {} recognized as {} {}!", addon.file.string(), addon.name, addon.addonVersionString);
     }
 
     if (launcher && addon.onLoadLauncher)
@@ -421,13 +486,13 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             [&] {
                 return addon.onLoadLauncher(&api);
             },
-            onError("Error in addon {} OnLoadLauncher, unloading...", addon.desc.name)))
+            onError("Error in addon {} OnLoadLauncher, unloading...", addon.name)))
         {
-            return onError("Addon {} OnLoadLauncher signaled a problem, unloading...", addon.desc.name)();
+            return onError("Addon {} OnLoadLauncher signaled a problem, unloading...", addon.name)();
         }
 
         g_CallbackAddon = nullptr;
-        spdlog::debug("Addon {} OnLoadLauncher called.", addon.desc.name);
+        spdlog::debug("Addon {} OnLoadLauncher called.", addon.name);
     }
 
     if (!launcher && addon.onLoad)
@@ -437,12 +502,12 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             [&] {
                 return addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
             },
-            onError("Error in addon {} OnLoad, unloading...", addon.desc.name)))
+            onError("Error in addon {} OnLoad, unloading...", addon.name)))
         {
-            return onError("Addon {} OnLoad signaled a problem, unloading...", addon.desc.name)();
+            return onError("Addon {} OnLoad signaled a problem, unloading...", addon.name)();
         }
         g_CallbackAddon = nullptr;
-        spdlog::debug("Addon {} OnLoad called.", addon.desc.name);
+        spdlog::debug("Addon {} OnLoad called.", addon.name);
     }
 
     return true;
