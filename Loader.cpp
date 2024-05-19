@@ -152,10 +152,16 @@ struct InspectionHandle
 
 std::optional<AddonData> InspectAddon(const std::filesystem::path& path, InspectionHandle& inspectHandle)
 {
+    const auto rootPath = std::filesystem::current_path() / path;
     DWORD handle;
-    auto fileVersionSize = GetFileVersionInfoSizeW(path.wstring().c_str(), &handle);
+    auto fileVersionSize = GetFileVersionInfoSizeW(rootPath.wstring().c_str(), &handle);
+    if(fileVersionSize == 0)
+    {
+        // Don't warn here; this is likely just not a compatible addon (no version info)
+        return std::nullopt;
+    }
     std::vector<unsigned char> fileVersionData(fileVersionSize);
-    if (FAILED(GetFileVersionInfoW(path.wstring().c_str(), handle, fileVersionSize, fileVersionData.data())))
+    if (FAILED(GetFileVersionInfoW(rootPath.wstring().c_str(), handle, fileVersionSize, fileVersionData.data())))
     {
         spdlog::warn("Could not obtain file version info for module {}: {}", path.string(), GetLastErrorMessage());
         return std::nullopt;
