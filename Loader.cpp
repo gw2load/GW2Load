@@ -77,7 +77,7 @@ struct AddonData
     unsigned short minorAddonVersion = 0;
     unsigned short patchAddonVersion = 0;
     unsigned short fixAddonVersion = 0;
-    unsigned int apiVersion = 0;
+    GW2Load_Version_t apiVersion = 0;
     std::string addonVersionString;
 
     std::vector<unsigned char> updateData;
@@ -469,15 +469,16 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (addon.apiVersion < GW2Load_CurrentAddonAPIVersion)
             {
                 return onError("Addon {} uses API version {}, which is too old for current loader API version {}, unloading...",
-                    addon.file.string(), addon.apiVersion, PrintDescVersion(GW2Load_CurrentAddonAPIVersion))();
+                    addon.file.string(), PrintDescVersion(addon.apiVersion), PrintDescVersion(GW2Load_CurrentAddonAPIVersion))();
             }
             else if (uint32_t addonVer = addon.apiVersion; addon.onOutdated)
             {
                 if (!SafeCall([&] {
-                    if (addon.onOutdated(GW2Load_CurrentAddonAPIVersion))
+                    addon.apiVersion = addon.onOutdated(GW2Load_CurrentAddonAPIVersion);
+                    if (addon.apiVersion > GW2Load_AddonAPIVersionMagicFlag && addon.apiVersion <= GW2Load_CurrentAddonAPIVersion)
                     {
-                        spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility, but consider upgrading your loader.",
-                            addon.file.string(), addonVer, PrintDescVersion(GW2Load_CurrentAddonAPIVersion));
+                        spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility to API version {}, but consider upgrading your loader.",
+                            addon.file.string(), PrintDescVersion(addonVer), PrintDescVersion(GW2Load_CurrentAddonAPIVersion), PrintDescVersion(addon.apiVersion));
                     }
                     }, onError("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.name)))
                 {
@@ -487,8 +488,14 @@ bool InitializeAddon(AddonData& addon, bool launcher)
 
             if (addon.apiVersion > GW2Load_CurrentAddonAPIVersion)
             {
-                return onError("Addon {} uses API version {}, which is newer than current loader API version {}, unloading...",
-                    addon.file.string(), addon.apiVersion, PrintDescVersion(GW2Load_CurrentAddonAPIVersion))();
+                return onError("Addon {} uses API version {}, which is newer than current loader API version {}, unloading... Please update your loader!",
+                    addon.file.string(), PrintDescVersion(addon.apiVersion), PrintDescVersion(GW2Load_CurrentAddonAPIVersion))();
+            }
+
+            if (addon.apiVersion <= GW2Load_AddonAPIVersionMagicFlag)
+            {
+                return onError("Addon {} uses an invalid API version {}, unloading...",
+                    addon.file.string(), addon.apiVersion)();
             }
         }
         }

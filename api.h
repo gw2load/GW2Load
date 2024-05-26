@@ -37,7 +37,7 @@
 * otherwise the version will fall back to the numerical field value (xx.yy.zz.ww).
 *
 * Only one export is required to be recognized as an addon:
-*   unsigned int GW2Load_GetAddonAPIVersion();
+*   GW2Load_Version_t GW2Load_GetAddonAPIVersion();
 *       Always return GW2Load_CurrentAddonAPIVersion in your implementation or zero to prevent loading.
 *       Do NOT do any initialization in GW2Load_GetAddonAPIVersion!
 *
@@ -48,14 +48,16 @@
 *   void GW2Load_OnClose();
 *
 * For advanced use only:
-*   bool GW2Load_OnAddonDescriptionVersionOutdated(unsigned int loaderVersion);
+*   GW2Load_Version_t GW2Load_OnAddonAPIVersionOutdated(GW2Load_Version_t loaderVersion);
 *       This will only be called if GW2Load's addon description version is *older* than the addon's,
 *       allowing the addon to adjust its behavior for the outdated loader. The loader will handle backwards compatibility automatically
 *       (e.g., an addon using version 1 being loaded by a loader with version 2).
+*       The addon must return the API version it will be using instead of its native version which must be less than or equal to the provided
+*       loader version. The addon can also return zero to abort the backwards compatibility attempt and get unloaded safely.
 *
 *   using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 *   void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
-*       If the export is defined, UpdateCheck will be called *before* GetAddonDescription to alllow the addon the opportunity to self-update.
+*       If the export is defined, UpdateCheck will be called *before* GetAddonAPIVersion to alllow the addon the opportunity to self-update.
 *       The provided callback may be called by the addon to signal to the loader that an update is pending.
 *       The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
 *       Two interpretations of the data buffer are available:
@@ -77,8 +79,9 @@
 *
 */
 
-inline static constexpr unsigned int GW2Load_AddonAPIVersionMagicFlag = 0xF0CF0000;
-inline static constexpr unsigned int GW2Load_CurrentAddonAPIVersion = GW2Load_AddonAPIVersionMagicFlag | 1;
+using GW2Load_Version_t = unsigned int;
+inline static constexpr GW2Load_Version_t GW2Load_AddonAPIVersionMagicFlag = 0xF0CF0000;
+inline static constexpr GW2Load_Version_t GW2Load_CurrentAddonAPIVersion = GW2Load_AddonAPIVersionMagicFlag | 1;
 
 enum class GW2Load_HookedFunction : unsigned int
 {
@@ -124,11 +127,11 @@ struct GW2Load_UpdateAPI
     GW2Load_UpdateCallback updateCallback;
 };
 
-using GW2Load_GetAddonAPIVersion_t = unsigned int(__cdecl*)();
+using GW2Load_GetAddonAPIVersion_t = GW2Load_Version_t(__cdecl*)();
 using GW2Load_OnLoad_t = bool(__cdecl*)(GW2Load_API* api, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
 using GW2Load_OnLoadLauncher_t = bool(__cdecl*)(GW2Load_API* api);
 using GW2Load_OnClose_t = void(__cdecl*)();
-using GW2Load_OnAddonDescriptionVersionOutdated_t = bool(__cdecl*)(unsigned int loaderVersion);
+using GW2Load_OnAddonDescriptionVersionOutdated_t = GW2Load_Version_t(__cdecl*)(GW2Load_Version_t loaderVersion);
 using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateAPI* api);
 
 /*
