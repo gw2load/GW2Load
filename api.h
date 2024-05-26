@@ -149,14 +149,11 @@ struct GW2Load_EnumeratedAddon
 {
     const char* path;
     const char* name;
-    unsigned short majorAddonVersion = 0;
-    unsigned short minorAddonVersion = 0;
-    unsigned short patchAddonVersion = 0;
-    unsigned short fixAddonVersion = 0;
 };
 
 extern "C"
 {
     // If allowDisabled is true, addons ending in a .dll.disabled extension will also be returned
     GW2LOAD_EXPORT GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, bool allowDisabled);
+    GW2LOAD_EXPORT bool GW2Load_CheckIfAddon(const char* path);
 }

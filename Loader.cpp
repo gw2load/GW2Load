@@ -292,11 +292,23 @@ extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDir
         auto* file = g_EnumeratedAddonStrings.back().c_str();
         g_EnumeratedAddonStrings.push_back(addon.name);
         auto* name = g_EnumeratedAddonStrings.back().c_str();
-        g_EnumeratedAddons.emplace_back(file, name, addon.majorAddonVersion, addon.minorAddonVersion, addon.patchAddonVersion, addon.fixAddonVersion);
+        g_EnumeratedAddons.emplace_back(file, name);
     }
 
     *count = static_cast<unsigned int>(g_EnumeratedAddons.size());
     return g_EnumeratedAddons.data();
+}
+
+extern "C" __declspec(dllexport) bool GW2Load_CheckIfAddon(const char* path)
+{
+    std::filesystem::path addonPath(path);
+    if (std::filesystem::exists(addonPath))
+    {
+        InspectionHandle handle;
+        return InspectAddon(addonPath, handle).has_value();
+    }
+    else
+        return false;
 }
 
 AddonData* g_CallbackAddon = nullptr;
