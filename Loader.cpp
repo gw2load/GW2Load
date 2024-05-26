@@ -219,7 +219,7 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
     else
         data.addonVersionString = std::format("{}.{}.{}.{}", data.majorAddonVersion, data.minorAddonVersion, data.patchAddonVersion, data.fixAddonVersion);
 
-    auto dllBase = SymLoadModuleExW(inspectHandle.process, nullptr, path.c_str(), nullptr, 0, 0, nullptr, 0);
+    auto dllBase = SymLoadModuleExW(inspectHandle.process, nullptr, path.c_str(), nullptr, 0, 0, nullptr, SLMFLAG_NO_SYMBOLS);
     if (dllBase == 0)
     {
         spdlog::warn("Could not load module {}: {}", path.string(), GetLastErrorMessage());
