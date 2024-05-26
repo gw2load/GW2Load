@@ -138,6 +138,7 @@ void Init()
     fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
     g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
     spdlog::set_default_logger(g_Logger);
+    spdlog::flush_every(std::chrono::seconds(5));
 
 #ifdef _DEBUG
     spdlog::set_level(spdlog::level::trace);
