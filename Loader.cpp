@@ -251,24 +251,30 @@ void EnumerateAddons(const std::filesystem::path& addonsPath, bool allowDisabled
     if (!std::filesystem::is_directory(addonsPath, ec))
         return;
 
-    for (const auto& dir : std::filesystem::directory_iterator{ addonsPath })
-    {
-        if (!dir.is_directory()) continue;
-        auto dirName = dir.path().filename().string();
-        if (dirName.starts_with(".") || dirName.starts_with("_")) continue;
-
-        for (const auto& file : std::filesystem::directory_iterator{ dir.path() })
+    auto recurse = [allowDisabled, &handle](this auto const& self, const std::filesystem::path& basePath) -> void {
+        for (const auto& entry : std::filesystem::directory_iterator{ basePath, std::filesystem::directory_options::follow_directory_symlink })
         {
-            if (!file.is_regular_file()) continue;
-            if (!file.path().has_extension()) continue;
-            auto ext = ToLower(file.path().extension().string());
-            if(ext != ".dll" && (!allowDisabled || ext != ".dll.disabled")) continue;
+            if (entry.is_directory())
+            {
+                auto dirName = entry.path().filename().string();
+                if (dirName.starts_with(".") || dirName.starts_with("_")) continue;
 
-            auto data = InspectAddon(file.path(), handle);
-            if(data)
-                g_Addons.push_back(std::move(*data));
+                self(entry.path());
+            }
+            else
+            {
+                if (!entry.is_regular_file()) continue;
+                if (!entry.path().has_extension()) continue;
+                auto ext = ToLower(entry.path().extension().string());
+                if (ext != ".dll" && (!allowDisabled || ext != ".dll.disabled")) continue;
+
+                auto data = InspectAddon(entry.path(), handle);
+                if (data)
+                    g_Addons.push_back(std::move(*data));
+            }
         }
-    }
+    };
+    recurse(addonsPath);
 }
 
 std::vector<GW2Load_EnumeratedAddon> g_EnumeratedAddons;

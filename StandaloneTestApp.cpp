@@ -9,6 +9,9 @@ int main(int argc, char* argv[])
 {
     if (argc != 2)
         return 1;
+
+    std::cout << "Enumerating addons in directory '" << argv[1] << "'" << std::endl;
+
     const auto addons = [&] {
         unsigned int count;
         auto* addons = GW2Load_GetAddonsInDirectory(argv[1], &count, true);
@@ -23,4 +26,6 @@ int main(int argc, char* argv[])
         if (!check)
             std::cout << "\tError: addon check failed" << std::endl;
     }
+
+    return 0;
 }
