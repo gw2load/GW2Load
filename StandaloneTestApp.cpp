@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
 
     const auto addons = [&] {
         unsigned int count;
-        auto* addons = GW2Load_GetAddonsInDirectory(argv[1], &count, true);
+        auto* addons = GW2Load_GetAddonsInDirectory(argv[1], &count, nullptr);
         return std::span{ addons, count };
     }();
 

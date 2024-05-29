@@ -4,6 +4,7 @@
 #include <dbghelp.h>
 #include <d3d11_1.h>
 #include <future>
+#include <regex>
 
 bool g_Quit = false;
 std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
@@ -55,6 +56,8 @@ struct fmt::formatter<GW2Load_CallbackPoint> : fmt::formatter<std::string_view> 
 struct AddonData
 {
     std::filesystem::path file;
+
+    bool isEnabled = false;
 
     bool hasGetAddonAPIVersion = false;
     bool hasOnLoad = false;
@@ -241,7 +244,7 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
         return std::nullopt;
 }
 
-void EnumerateAddons(const std::filesystem::path& addonsPath, bool allowDisabled)
+void EnumerateAddons(const std::filesystem::path& addonsPath, const std::regex& regex)
 {
     InspectionHandle handle;
     if (!handle.symInitialized)
@@ -251,7 +254,7 @@ void EnumerateAddons(const std::filesystem::path& addonsPath, bool allowDisabled
     if (!std::filesystem::is_directory(addonsPath, ec))
         return;
 
-    auto recurse = [allowDisabled, &handle](this auto const& self, const std::filesystem::path& basePath) -> void {
+    auto recurse = [regex, &handle](this auto const& self, const std::filesystem::path& basePath) -> void {
         for (const auto& entry : std::filesystem::directory_iterator{ basePath, std::filesystem::directory_options::follow_directory_symlink })
         {
             if (entry.is_directory())
@@ -264,27 +267,45 @@ void EnumerateAddons(const std::filesystem::path& addonsPath, bool allowDisabled
             else
             {
                 if (!entry.is_regular_file()) continue;
-                if (!entry.path().has_extension()) continue;
-                auto ext = ToLower(entry.path().extension().string());
-                if (ext != ".dll" && (!allowDisabled || ext != ".dll.disabled")) continue;
+
+                if (!entry.path().has_filename()) continue;
+                if (!std::regex_match(entry.path().filename().string(), regex)) continue;
 
                 auto data = InspectAddon(entry.path(), handle);
-                if (data)
+                if (data) {
+                    data->isEnabled = entry.path().has_extension() && entry.path().extension() == ".dll";
                     g_Addons.push_back(std::move(*data));
+                }
             }
         }
     };
+
     recurse(addonsPath);
 }
 
 std::vector<GW2Load_EnumeratedAddon> g_EnumeratedAddons;
 std::vector<std::string> g_EnumeratedAddonStrings;
-extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, bool allowDisabled)
+extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, const char* pattern)
 {
     if (!IsAttachedToGame())
     {
+        std::regex regex;
+
+        if (!pattern) {
+            regex = std::regex(".*\\.dll");
+        }
+        else {
+            try {
+                regex = std::regex(pattern);
+            }
+            catch (std::regex_error&) {
+                spdlog::error("Cannot enumerate add-ons. Invalid pattern provided: {}", pattern);
+                return nullptr;
+            }
+        }
+
         g_Addons.clear();
-        EnumerateAddons(directory, allowDisabled);
+        EnumerateAddons(directory, regex);
     }
 
     g_EnumeratedAddons.clear();
@@ -298,7 +319,7 @@ extern "C" __declspec(dllexport) GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDir
         auto* file = g_EnumeratedAddonStrings.back().c_str();
         g_EnumeratedAddonStrings.push_back(addon.name);
         auto* name = g_EnumeratedAddonStrings.back().c_str();
-        g_EnumeratedAddons.emplace_back(file, name);
+        g_EnumeratedAddons.emplace_back(file, name, addon.isEnabled);
     }
 
     *count = static_cast<unsigned int>(g_EnumeratedAddons.size());
@@ -667,7 +688,7 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
     switch (type)
     {
     case InitializationType::InLauncher:
-        EnumerateAddons("addons", false);
+        EnumerateAddons("addons", std::regex(".*\\.dll"));
         InitializeAddons(true);
         break;
     case InitializationType::BeforeFirstWindow:
