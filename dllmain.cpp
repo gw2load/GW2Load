@@ -132,23 +132,25 @@ void Init()
         return;
 
     std::filesystem::create_directories("addons/_logs/GW2Load");
-    auto outputLogger = std::make_shared<spdlog::sinks::msvc_sink_st>(true);
+    auto outputLogger = std::make_shared<spdlog::sinks::msvc_sink_mt>(true);
     outputLogger->set_pattern("[GW2Load>%l|%T.%f] %v");
-    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_st>("addons/_logs/GW2Load/GW2Load.log", 100_kb, 10, true);
+    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_mt>("addons/_logs/GW2Load/GW2Load.log", 100_kb, 10, true);
     fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
     g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
     spdlog::set_default_logger(g_Logger);
-    spdlog::flush_every(std::chrono::seconds(5));
 
 #ifdef _DEBUG
+    spdlog::flush_every(std::chrono::seconds(1));
     spdlog::set_level(spdlog::level::trace);
 #else
-    spdlog::set_level(spdlog::level::warn);
+    spdlog::flush_every(std::chrono::seconds(5));
+    spdlog::set_level(spdlog::level::info);
 #endif
 
     if(!g_callWndProcHook)
         g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, nullptr, GetCurrentThreadId());
 
+    spdlog::info("Initializing GW2Load...");
     Initialize(InitializationType::InLauncher, std::nullopt);
 }
 

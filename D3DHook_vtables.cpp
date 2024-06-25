@@ -84,19 +84,22 @@ HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
 	return returnValue;
 }
 
-std::vector<std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>> g_SwapChainTables;
+using SwapChainVirtualTable = std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>;
+std::vector<SwapChainVirtualTable> g_SwapChainTables;
 //std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
 //std::vector<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
 
 void OverwriteVTables(void* sc, void* dev, void* ctx)
 {
+	spdlog::debug("Attempting to overwrite vtables...");
+
 	auto* swapChainVT = reinterpret_cast<IDXGISwapChain*>(sc)->lpVtbl;
 	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;
 	auto* contextVT = reinterpret_cast<ID3D11DeviceContext*>(ctx)->lpVtbl;
 
-	if (std::ranges::find(g_SwapChainTables, swapChainVT,
-		[](const auto& v) { auto* p = std::get_if<IDXGISwapChainVtbl*>(&v); return p ? *p : nullptr; }) == g_SwapChainTables.end())
+	if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChainVT)) == g_SwapChainTables.end())
 	{
+		spdlog::debug("SwapChain vtable is new: hooking!");
 		HookFunction(swapChainVT->Present, HkSwapChainPresent, RealSwapChainPresent);
 		HookFunction(swapChainVT->ResizeBuffers, HkSwapChainResizeBuffers, RealSwapChainResizeBuffers);
 
@@ -105,21 +108,31 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 		auto* sc1 = GetSwapChain1(reinterpret_cast<IDXGISwapChain*>(sc));
 		if (sc1)
 		{
+			spdlog::debug("SwapChain1 is available, checking...");
 			auto* swapChain1VT = sc1->lpVtbl;
-			HookFunction(swapChain1VT->Present1, HkSwapChain1Present1, RealSwapChain1Present1);
-			swapChain1VT->Release(sc1);
+			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain1VT)) == g_SwapChainTables.end())
+			{
+				spdlog::debug("SwapChain1 vtable is new: hooking!");
+				HookFunction(swapChain1VT->Present1, HkSwapChain1Present1, RealSwapChain1Present1);
+				swapChain1VT->Release(sc1);
 
-			g_SwapChainTables.push_back(swapChain1VT);
+				g_SwapChainTables.push_back(swapChain1VT);
+			}
 		}
 
 		auto* sc3 = GetSwapChain3(reinterpret_cast<IDXGISwapChain*>(sc));
 		if (sc3)
 		{
+			spdlog::debug("SwapChain3 is available, checking...");
 			auto* swapChain3VT = sc3->lpVtbl;
-			HookFunction(swapChain3VT->ResizeBuffers1, HkSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
-			swapChain3VT->Release(sc3);
+			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain3VT)) == g_SwapChainTables.end())
+			{
+				spdlog::debug("SwapChain3 vtable is new: hooking!");
+				HookFunction(swapChain3VT->ResizeBuffers1, HkSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
+				swapChain3VT->Release(sc3);
 
-			g_SwapChainTables.push_back(swapChain3VT);
+				g_SwapChainTables.push_back(swapChain3VT);
+			}
 		}
 
 	}
@@ -127,6 +140,8 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 
 void RestoreVTables()
 {
+	spdlog::debug("Restoring all vtables...");
+
 	for (auto& vt : g_SwapChainTables)
 	{
 		if (auto* p = std::get_if<IDXGISwapChainVtbl*>(&vt); p)

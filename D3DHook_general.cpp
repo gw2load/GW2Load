@@ -12,8 +12,13 @@ std::unordered_set<HWND> g_D3DKnownHWNDs;
 
 bool InitializeD3DHook(HWND hWnd)
 {
+	spdlog::debug("Attempting to initialize D3D hook for window {}.", reinterpret_cast<void*>(hWnd));
+
 	if (g_D3DKnownHWNDs.contains(hWnd))
+	{
+		spdlog::debug("Skipping window {} because it was already hooked.", reinterpret_cast<void*>(hWnd));
 		return false;
+	}
 
 	g_D3DKnownHWNDs.insert(hWnd);
 
@@ -34,8 +39,11 @@ bool InitializeD3DHook(HWND hWnd)
 	ComPtr<ID3D11Device> tempDevice;
 	ComPtr<ID3D11DeviceContext> tempContext;
 
-	if (FAILED(D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &tempSwapChain, &tempDevice, NULL, &tempContext)))
+	if (auto hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &tempSwapChain, &tempDevice, NULL, &tempContext); FAILED(hr))
+	{
+		spdlog::error("Failed to hook window {} due to failed D3D11CreateDeviceAndSwapChain: error code {:x}.", reinterpret_cast<void*>(hWnd), hr);
 		return false;
+	}
 
 	OverwriteVTables(tempSwapChain.Get(), tempDevice.Get(), tempContext.Get());
 
