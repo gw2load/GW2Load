@@ -180,7 +180,7 @@ std::string_view GetWndProcMessageName(UINT msg)
 		return it->second;
 	else
 	{
-		lastMsg = std::format("unknown<{}>", msg);
+		lastMsg = std::format("unknown<{:x}>", msg);
 		return lastMsg;
 	}
 }
