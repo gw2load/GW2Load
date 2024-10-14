@@ -6,7 +6,7 @@ struct IDXGISwapChain;
 struct IDXGISwapChain1;
 struct IDXGISwapChain3;
 
-bool InitializeD3DHook(HWND hWnd);
+bool InitializeD3DHook();
 void InitializeD3DObjects(IDXGISwapChain* swc);
 void ShutdownD3DObjects(HWND hWnd);
 void OverwriteVTables(void* sc, void* dev, void* ctx);

@@ -2,6 +2,8 @@
 
 #include "Common.h"
 
+#include <MinHook.h>
+
 struct LANGANDCODEPAGE
 {
     WORD wLanguage;
@@ -66,3 +68,26 @@ public:
 };
 
 const char* GetLastErrorMessage();
+
+template <typename T>
+inline tl::expected<T*, MH_STATUS> DetourLibraryFunction(HMODULE module, LPCSTR functionName, T* detour)
+{
+    auto address = GetProcAddress(module, functionName);
+    if (!address)
+        return tl::unexpected(MH_ERROR_FUNCTION_NOT_FOUND);
+
+    T* original;
+    auto status = MH_CreateHook(address, detour, reinterpret_cast<LPVOID*>(&original));
+    if (status != MH_OK)
+        return tl::unexpected(status);
+
+    return original;
+}
+
+template<>
+struct fmt::formatter<MH_STATUS> : fmt::formatter<int> {
+    template<class FmtContext>
+    FmtContext::iterator format(MH_STATUS status, FmtContext& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(status), ctx);
+    }
+};

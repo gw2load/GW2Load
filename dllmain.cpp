@@ -9,6 +9,8 @@
 
 HWND g_LauncherWindow = nullptr;
 HMODULE g_MSIMG32Handle = nullptr;
+HMODULE g_D3D11Handle = nullptr;
+HMODULE g_DXGIHandle = nullptr;
 HMODULE g_LoaderModuleHandle = nullptr;
 bool g_FirstWindowCreated = false;
 bool g_MainWindowCreated = false;
@@ -118,15 +120,15 @@ void Init()
 {
     PWSTR path;
     SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &path);
+    Cleanup cleanPath{ [&] { CoTaskMemFree(path); } };
+
     std::filesystem::path p(path);
-    p /= "msimg32.dll";
-    g_MSIMG32Handle = LoadLibraryW(p.wstring().c_str());
+    g_MSIMG32Handle = LoadLibraryW((p / "msimg32.dll").wstring().c_str());
     FUNC_LOAD(vSetDdrawflag);
     FUNC_LOAD(AlphaBlend);
     FUNC_LOAD(DllInitialize);
     FUNC_LOAD(GradientFill);
     FUNC_LOAD(TransparentBlt);
-    CoTaskMemFree(path);
 
     if (!ValidateExecutable())
         return;
@@ -146,6 +148,11 @@ void Init()
     spdlog::flush_every(std::chrono::seconds(5));
     spdlog::set_level(spdlog::level::info);
 #endif
+
+    if (!g_D3D11Handle)
+        g_D3D11Handle = LoadLibraryW(L"d3d11.dll");
+    if (!g_DXGIHandle)
+        g_DXGIHandle = LoadLibraryW(L"dxgi.dll");
 
     if(!g_callWndProcHook)
         g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, nullptr, GetCurrentThreadId());

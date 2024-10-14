@@ -15,6 +15,7 @@
 #include <windows.h>
 
 #include <spdlog/spdlog.h>
+#include <tl/expected.hpp>
 
 #include <d3d11_1.h>
 #include <dxgi1_6.h>

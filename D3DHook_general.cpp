@@ -8,44 +8,56 @@
 
 using namespace Microsoft::WRL;
 
-std::unordered_set<HWND> g_D3DKnownHWNDs;
+extern HMODULE g_D3D11Handle;
+extern HMODULE g_DXGIHandle;
 
-bool InitializeD3DHook(HWND hWnd)
+#define DECLARE_HOOK(Name_) \
+decltype(Name_)* Real##Name_ = nullptr; \
+HRESULT WINAPI Hk##Name_
+
+DECLARE_HOOK(D3D11CreateDevice)(
+	_In_opt_ IDXGIAdapter* pAdapter,
+	D3D_DRIVER_TYPE DriverType,
+	HMODULE Software,
+	UINT Flags,
+	_In_reads_opt_(FeatureLevels) CONST D3D_FEATURE_LEVEL* pFeatureLevels,
+	UINT FeatureLevels,
+	UINT SDKVersion,
+	_COM_Outptr_opt_ ID3D11Device** ppDevice,
+	_Out_opt_ D3D_FEATURE_LEVEL* pFeatureLevel,
+	_COM_Outptr_opt_ ID3D11DeviceContext** ppImmediateContext)
 {
-	spdlog::debug("Attempting to initialize D3D hook for window {}.", reinterpret_cast<void*>(hWnd));
+	return RealD3D11CreateDevice(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext);
+}
 
-	if (g_D3DKnownHWNDs.contains(hWnd))
+#undef DECLARE_HOOK
+
+bool InitializeD3DHook()
+{
+	if (!g_D3D11Handle || !g_DXGIHandle)
 	{
-		spdlog::debug("Skipping window {} because it was already hooked.", reinterpret_cast<void*>(hWnd));
+		spdlog::critical("Cannot initialize D3D hooks, invalid handle(s): D3D11Handle = {}; DXGIHandle = {}", fmt::ptr(g_D3D11Handle), fmt::ptr(g_DXGIHandle));
 		return false;
 	}
 
-	g_D3DKnownHWNDs.insert(hWnd);
-
-	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-	DXGI_SWAP_CHAIN_DESC swapChainDesc;
-	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
-	swapChainDesc.BufferCount = 1;
-	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	swapChainDesc.OutputWindow = hWnd;
-	swapChainDesc.SampleDesc.Count = 1;
-	swapChainDesc.Windowed = (GetWindowLong(hWnd, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
-	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-	ComPtr<IDXGISwapChain> tempSwapChain;
-	ComPtr<ID3D11Device> tempDevice;
-	ComPtr<ID3D11DeviceContext> tempContext;
-
-	if (auto hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &tempSwapChain, &tempDevice, NULL, &tempContext); FAILED(hr))
+	if (auto err = MH_Initialize(); err != MH_OK)
 	{
-		spdlog::error("Failed to hook window {} due to failed D3D11CreateDeviceAndSwapChain: error code {:x}.", reinterpret_cast<void*>(hWnd), hr);
+		spdlog::critical("Cannot initialize D3D hooks: cannot initialize MinHook, error code {}", err);
 		return false;
 	}
 
-	OverwriteVTables(tempSwapChain.Get(), tempDevice.Get(), tempContext.Get());
+#define HOOK_OR_RETURN(Mod_, Name_) \
+	{ auto r = DetourLibraryFunction(Mod_, #Name_, Hk##Name_); if(r.has_value()) Real##Name_ = *r; else { spdlog::critical("Could not hook {}: error code {}!", #Name_, r.error()); return false; } }
+
+	HOOK_OR_RETURN(g_D3D11Handle, D3D11CreateDevice);
+
+	if (auto err = MH_EnableHook(MH_ALL_HOOKS); err != MH_OK)
+	{
+		spdlog::critical("Cannot initialize D3D hooks: cannot enable MinHook, error code {}", err);
+		return false;
+	}
+
+#undef HOOK_OR_RETURN
 
 	return true;
 }
