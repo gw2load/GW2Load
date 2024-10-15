@@ -15,7 +15,7 @@ extern HMODULE g_DXGIHandle;
 decltype(Name_)* Real##Name_ = nullptr; \
 HRESULT WINAPI Hk##Name_
 
-DECLARE_HOOK(D3D11CreateDevice)(
+DECLARE_HOOK(D3D11CreateDeviceAndSwapChain)(
 	_In_opt_ IDXGIAdapter* pAdapter,
 	D3D_DRIVER_TYPE DriverType,
 	HMODULE Software,
@@ -23,11 +23,40 @@ DECLARE_HOOK(D3D11CreateDevice)(
 	_In_reads_opt_(FeatureLevels) CONST D3D_FEATURE_LEVEL* pFeatureLevels,
 	UINT FeatureLevels,
 	UINT SDKVersion,
+	_In_opt_ CONST DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+	_COM_Outptr_opt_ IDXGISwapChain** ppSwapChain,
 	_COM_Outptr_opt_ ID3D11Device** ppDevice,
 	_Out_opt_ D3D_FEATURE_LEVEL* pFeatureLevel,
 	_COM_Outptr_opt_ ID3D11DeviceContext** ppImmediateContext)
 {
-	return RealD3D11CreateDevice(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext);
+	auto rval = RealD3D11CreateDeviceAndSwapChain(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, pSwapChainDesc, ppSwapChain, ppDevice, pFeatureLevel, ppImmediateContext);
+	if (SUCCEEDED(rval))
+		InitializeD3DObjects(*ppSwapChain);
+	return rval;
+}
+
+DECLARE_HOOK(CreateDXGIFactory)(REFIID riid, _COM_Outptr_ void** ppFactory)
+{
+	auto rval = RealCreateDXGIFactory(riid, ppFactory);
+	if(SUCCEEDED(rval))
+		OverwriteDXGIFactoryVTables(*ppFactory);
+	return rval;
+}
+
+DECLARE_HOOK(CreateDXGIFactory1)(REFIID riid, _COM_Outptr_ void** ppFactory)
+{
+	auto rval = RealCreateDXGIFactory1(riid, ppFactory);
+	if (SUCCEEDED(rval))
+		OverwriteDXGIFactoryVTables(*ppFactory);
+	return rval;
+}
+
+DECLARE_HOOK(CreateDXGIFactory2)(UINT Flags, REFIID riid, _COM_Outptr_ void** ppFactory)
+{
+	auto rval = RealCreateDXGIFactory2(Flags, riid, ppFactory);
+	if (SUCCEEDED(rval))
+		OverwriteDXGIFactoryVTables(*ppFactory);
+	return rval;
 }
 
 #undef DECLARE_HOOK
@@ -128,30 +157,21 @@ void ShutdownD3DObjects(HWND hWnd)
 	RestoreVTables();
 }
 
-IDXGISwapChain1* GetSwapChain1(IDXGISwapChain* sc)
-{
-	IDXGISwapChain1* sc1 = nullptr;
-	if (SUCCEEDED(sc->QueryInterface(&sc1)))
-		return sc1;
-	else
-		return nullptr;
+#define QUERY_VERSIONED_INTERFACE(Name_, Prefix_, Version_) \
+Prefix_##Name_##Version_* Get##Name_##Version_(Prefix_##Name_* obj) \
+{ \
+	Prefix_##Name_##Version_* vobj = nullptr; \
+	if (SUCCEEDED(obj->QueryInterface(&vobj))) \
+		return vobj; \
+	else \
+		return nullptr; \
+} \
+Prefix_##Name_* Downcast(Prefix_##Name_##Version_* obj) \
+{ \
+	return obj; \
 }
 
-IDXGISwapChain3* GetSwapChain3(IDXGISwapChain* sc)
-{
-	IDXGISwapChain3* sc3 = nullptr;
-	if (SUCCEEDED(sc->QueryInterface(&sc3)))
-		return sc3;
-	else
-		return nullptr;
-}
+QUERY_VERSIONED_INTERFACE(SwapChain, IDXGI, 1);
+QUERY_VERSIONED_INTERFACE(SwapChain, IDXGI, 3);
 
-IDXGISwapChain* Downcast(IDXGISwapChain1* swc)
-{
-	return swc;
-}
-
-IDXGISwapChain* Downcast(IDXGISwapChain3* swc)
-{
-	return swc;
-}
+QUERY_VERSIONED_INTERFACE(Factory, IDXGI, 2);

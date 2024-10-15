@@ -15,6 +15,7 @@ requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref
 	function = hook;
 	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
 }
+#define HOOK_FUNCTION(FP_, Name_) HookFunction(FP_, Hk##Name_, Real##Name_)
 
 void UnhookFunction(auto& function, auto& backup)
 requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<decltype(backup)>>
@@ -91,7 +92,7 @@ std::vector<SwapChainVirtualTable> g_SwapChainTables;
 
 void OverwriteVTables(void* sc, void* dev, void* ctx)
 {
-	spdlog::debug("Attempting to overwrite vtables...");
+	spdlog::debug("Attempting to overwrite device/context/swapchain vtables...");
 
 	auto* swapChainVT = reinterpret_cast<IDXGISwapChain*>(sc)->lpVtbl;
 	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;
@@ -100,8 +101,8 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 	if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChainVT)) == g_SwapChainTables.end())
 	{
 		spdlog::debug("SwapChain vtable is new: hooking!");
-		HookFunction(swapChainVT->Present, HkSwapChainPresent, RealSwapChainPresent);
-		HookFunction(swapChainVT->ResizeBuffers, HkSwapChainResizeBuffers, RealSwapChainResizeBuffers);
+		HOOK_FUNCTION(swapChainVT->Present, SwapChainPresent);
+		HOOK_FUNCTION(swapChainVT->ResizeBuffers, SwapChainResizeBuffers);
 
 		g_SwapChainTables.push_back(swapChainVT);
 
@@ -113,7 +114,7 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain1VT)) == g_SwapChainTables.end())
 			{
 				spdlog::debug("SwapChain1 vtable is new: hooking!");
-				HookFunction(swapChain1VT->Present1, HkSwapChain1Present1, RealSwapChain1Present1);
+				HOOK_FUNCTION(swapChain1VT->Present1, SwapChain1Present1);
 				swapChain1VT->Release(sc1);
 
 				g_SwapChainTables.push_back(swapChain1VT);
@@ -128,13 +129,51 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain3VT)) == g_SwapChainTables.end())
 			{
 				spdlog::debug("SwapChain3 vtable is new: hooking!");
-				HookFunction(swapChain3VT->ResizeBuffers1, HkSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
+				HOOK_FUNCTION(swapChain3VT->ResizeBuffers1, SwapChain3ResizeBuffers1);
 				swapChain3VT->Release(sc3);
 
 				g_SwapChainTables.push_back(swapChain3VT);
 			}
 		}
 
+	}
+}
+
+using DXGIFactoryVirtualTable = std::variant<IDXGIFactoryVtbl*, IDXGIFactory2Vtbl*>;
+std::vector<DXGIFactoryVirtualTable> g_DXGIFactoryTables;
+
+void OverwriteDXGIFactoryVTables(void* factory)
+{
+	spdlog::debug("Attempting to overwrite DXGI factory vtables...");
+
+	auto* factoryVT = reinterpret_cast<IDXGIFactory*>(factory)->lpVtbl;
+
+	if (std::ranges::find(g_DXGIFactoryTables, DXGIFactoryVirtualTable(factoryVT)) == g_DXGIFactoryTables.end())
+	{
+		spdlog::debug("DXGI factory vtable is new: hooking!");
+
+		HOOK_FUNCTION(factoryVT->CreateSwapChain, FactoryCreateSwapChain);
+
+		g_DXGIFactoryTables.push_back(factoryVT);
+
+		auto* f2 = GetFactory2(reinterpret_cast<IDXGIFactory*>(factory));
+		if (f2)
+		{
+			spdlog::debug("DXGI factory 2 is available, checking...");
+			auto* factory2VT = f2->lpVtbl;
+
+			if (std::ranges::find(g_DXGIFactoryTables, DXGIFactoryVirtualTable(factory2VT)) == g_DXGIFactoryTables.end())
+			{
+				spdlog::debug("DXGI factory 2 vtable is new: hooking!");
+
+				HOOK_FUNCTION(factory2VT->CreateSwapChainForComposition, FactoryCreateSwapChainForComposition);
+				HOOK_FUNCTION(factory2VT->CreateSwapChainForCoreWindow, FactoryCreateSwapChainForCoreWindow);
+				HOOK_FUNCTION(factory2VT->CreateSwapChainForHwnd, FactoryCreateSwapChainForHwnd);
+
+				g_DXGIFactoryTables.push_back(factory2VT);
+
+			}
+		}
 	}
 }
 
@@ -164,4 +203,21 @@ void RestoreVTables()
 		}
 	}
 	g_SwapChainTables.clear();
+
+	for (auto& factory : g_DXGIFactoryTables)
+	{
+		if (auto* p = std::get_if<IDXGIFactoryVtbl*>(&factory); p)
+		{
+			auto* factoryVT = *p;
+			UnhookFunction(factoryVT->CreateSwapChain, RealFactoryCreateSwapChain);
+		}
+		if (auto* p = std::get_if<IDXGIFactory2Vtbl*>(&factory); p)
+		{
+			auto* factory2VT = *p;
+			UnhookFunction(factory2VT->CreateSwapChainForComposition, RealFactoryCreateSwapChainForComposition);
+			UnhookFunction(factory2VT->CreateSwapChainForCoreWindow, RealFactoryCreateSwapChainForCoreWindow);
+			UnhookFunction(factory2VT->CreateSwapChainForHwnd, RealFactoryCreateSwapChainForHwnd);
+		}
+	}
+	g_DXGIFactoryTables.clear();
 }
