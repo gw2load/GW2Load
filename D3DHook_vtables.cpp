@@ -26,8 +26,11 @@ requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref
 	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
 }
 
-decltype(IDXGISwapChainVtbl::Present) RealSwapChainPresent = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
+#define DECLARE_HOOK(Type_, ShortTypeName_, Name_) \
+std::decay_t<decltype(Type_##Vtbl::Name_)> Real##ShortTypeName_##Name_ = nullptr; \
+HRESULT STDMETHODCALLTYPE Hk##ShortTypeName_##Name_
+
+DECLARE_HOOK(IDXGISwapChain, SwapChain, Present)(
 	IDXGISwapChain* This,
 	UINT SyncInterval,
 	UINT Flags)
@@ -39,8 +42,7 @@ HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
 	return returnValue;
 }
 
-decltype(IDXGISwapChain1Vtbl::Present1) RealSwapChain1Present1 = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
+DECLARE_HOOK(IDXGISwapChain1, SwapChain1, Present1)(
 	IDXGISwapChain1* This,
 	UINT SyncInterval,
 	UINT PresentFlags,
@@ -53,8 +55,7 @@ HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
 	return returnValue;
 }
 
-decltype(IDXGISwapChainVtbl::ResizeBuffers) RealSwapChainResizeBuffers = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
+DECLARE_HOOK(IDXGISwapChain, SwapChain, ResizeBuffers)(
 	IDXGISwapChain* This,
 	UINT BufferCount,
 	UINT Width,
@@ -68,8 +69,7 @@ HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
 	return returnValue;
 }
 
-decltype(IDXGISwapChain3Vtbl::ResizeBuffers1) RealSwapChain3ResizeBuffers1 = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
+DECLARE_HOOK(IDXGISwapChain3, SwapChain3, ResizeBuffers1)(
 	IDXGISwapChain3* This,
 	UINT BufferCount,
 	UINT Width,
@@ -85,18 +85,75 @@ HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
 	return returnValue;
 }
 
+DECLARE_HOOK(IDXGIFactory, Factory, CreateSwapChain)(
+	IDXGIFactory* This,
+	IUnknown* pDevice,
+	DXGI_SWAP_CHAIN_DESC* pDesc,
+	IDXGISwapChain** ppSwapChain)
+{
+	auto rval = RealFactoryCreateSwapChain(This, pDevice, pDesc, ppSwapChain);
+	if (SUCCEEDED(rval))
+		OverwriteSwapChainVTables(*ppSwapChain);
+	return rval;
+}
+
+DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForComposition)(
+	IDXGIFactory2* This,
+	IUnknown* pDevice,
+	const DXGI_SWAP_CHAIN_DESC1* pDesc,
+	IDXGIOutput* pRestrictToOutput,
+	IDXGISwapChain1** ppSwapChain)
+{
+	auto rval = RealFactory2CreateSwapChainForComposition(This, pDevice, pDesc, pRestrictToOutput, ppSwapChain);
+	if (SUCCEEDED(rval))
+		OverwriteSwapChainVTables(*ppSwapChain);
+	return rval;
+}
+
+DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForCoreWindow)(
+	IDXGIFactory2* This,
+	IUnknown* pDevice,
+	IUnknown* pWindow,
+	const DXGI_SWAP_CHAIN_DESC1* pDesc,
+	IDXGIOutput* pRestrictToOutput,
+	IDXGISwapChain1** ppSwapChain)
+{
+	auto rval = RealFactory2CreateSwapChainForCoreWindow(This, pDevice, pWindow, pDesc, pRestrictToOutput, ppSwapChain);
+	if (SUCCEEDED(rval))
+		OverwriteSwapChainVTables(*ppSwapChain);
+	return rval;
+}
+
+DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForHwnd)(
+	IDXGIFactory2* This,
+	IUnknown* pDevice,
+	HWND hWnd,
+	const DXGI_SWAP_CHAIN_DESC1* pDesc,
+	const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
+	IDXGIOutput* pRestrictToOutput,
+	IDXGISwapChain1** ppSwapChain)
+{
+	auto rval = RealFactory2CreateSwapChainForHwnd(This, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
+	if (SUCCEEDED(rval))
+		OverwriteSwapChainVTables(*ppSwapChain);
+	return rval;
+}
+
 using SwapChainVirtualTable = std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>;
 std::vector<SwapChainVirtualTable> g_SwapChainTables;
-//std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
-//std::vector<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
 
-void OverwriteVTables(void* sc, void* dev, void* ctx)
+void OverwriteSwapChainVTables(void* sc)
 {
-	spdlog::debug("Attempting to overwrite device/context/swapchain vtables...");
+	if (!sc)
+		return;
 
-	auto* swapChainVT = reinterpret_cast<IDXGISwapChain*>(sc)->lpVtbl;
-	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;
-	auto* contextVT = reinterpret_cast<ID3D11DeviceContext*>(ctx)->lpVtbl;
+	spdlog::debug("Attempting to overwrite device/context/swapchain vtables...");
+	auto* swapChain = reinterpret_cast<IDXGISwapChain*>(sc);
+	auto [device, deviceContext] = GetDeviceFromSwapChain(swapChain);
+
+	auto* swapChainVT = swapChain->lpVtbl;
+	auto* deviceVT = device->lpVtbl;
+	auto* contextVT = deviceContext->lpVtbl;
 
 	if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChainVT)) == g_SwapChainTables.end())
 	{
@@ -166,9 +223,9 @@ void OverwriteDXGIFactoryVTables(void* factory)
 			{
 				spdlog::debug("DXGI factory 2 vtable is new: hooking!");
 
-				HOOK_FUNCTION(factory2VT->CreateSwapChainForComposition, FactoryCreateSwapChainForComposition);
-				HOOK_FUNCTION(factory2VT->CreateSwapChainForCoreWindow, FactoryCreateSwapChainForCoreWindow);
-				HOOK_FUNCTION(factory2VT->CreateSwapChainForHwnd, FactoryCreateSwapChainForHwnd);
+				HOOK_FUNCTION(factory2VT->CreateSwapChainForComposition, Factory2CreateSwapChainForComposition);
+				HOOK_FUNCTION(factory2VT->CreateSwapChainForCoreWindow, Factory2CreateSwapChainForCoreWindow);
+				HOOK_FUNCTION(factory2VT->CreateSwapChainForHwnd, Factory2CreateSwapChainForHwnd);
 
 				g_DXGIFactoryTables.push_back(factory2VT);
 
@@ -214,9 +271,9 @@ void RestoreVTables()
 		if (auto* p = std::get_if<IDXGIFactory2Vtbl*>(&factory); p)
 		{
 			auto* factory2VT = *p;
-			UnhookFunction(factory2VT->CreateSwapChainForComposition, RealFactoryCreateSwapChainForComposition);
-			UnhookFunction(factory2VT->CreateSwapChainForCoreWindow, RealFactoryCreateSwapChainForCoreWindow);
-			UnhookFunction(factory2VT->CreateSwapChainForHwnd, RealFactoryCreateSwapChainForHwnd);
+			UnhookFunction(factory2VT->CreateSwapChainForComposition, RealFactory2CreateSwapChainForComposition);
+			UnhookFunction(factory2VT->CreateSwapChainForCoreWindow, RealFactory2CreateSwapChainForCoreWindow);
+			UnhookFunction(factory2VT->CreateSwapChainForHwnd, RealFactory2CreateSwapChainForHwnd);
 		}
 	}
 	g_DXGIFactoryTables.clear();

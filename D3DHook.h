@@ -6,11 +6,17 @@ struct IDXGISwapChain;
 struct IDXGISwapChain1;
 struct IDXGISwapChain3;
 
+struct ID3D11Device;
+struct ID3D11DeviceContext;
+
+struct IDXGIFactory;
+
 bool InitializeD3DHook();
 void InitializeD3DObjects(IDXGISwapChain* swc);
 void ShutdownD3DObjects(HWND hWnd);
 void OverwriteDXGIFactoryVTables(void* factory);
-void OverwriteVTables(void* sc, void* dev, void* ctx);
+void OverwriteSwapChainVTables(void* sc);
+std::pair<ID3D11Device*, ID3D11DeviceContext*> GetDeviceFromSwapChain(IDXGISwapChain* sc);
 void RestoreVTables();
 
 extern struct IDXGISwapChain* g_SwapChain;

@@ -78,7 +78,10 @@ bool InitializeD3DHook()
 #define HOOK_OR_RETURN(Mod_, Name_) \
 	{ auto r = DetourLibraryFunction(Mod_, #Name_, Hk##Name_); if(r.has_value()) Real##Name_ = *r; else { spdlog::critical("Could not hook {}: error code {}!", #Name_, r.error()); return false; } }
 
-	HOOK_OR_RETURN(g_D3D11Handle, D3D11CreateDevice);
+	HOOK_OR_RETURN(g_D3D11Handle, D3D11CreateDeviceAndSwapChain);
+	HOOK_OR_RETURN(g_DXGIHandle, CreateDXGIFactory);
+	HOOK_OR_RETURN(g_DXGIHandle, CreateDXGIFactory1);
+	HOOK_OR_RETURN(g_DXGIHandle, CreateDXGIFactory2);
 
 	if (auto err = MH_EnableHook(MH_ALL_HOOKS); err != MH_OK)
 	{
@@ -155,6 +158,18 @@ void ShutdownD3DObjects(HWND hWnd)
 	g_AssociatedWindow = nullptr;
 
 	RestoreVTables();
+}
+
+std::pair<ID3D11Device*, ID3D11DeviceContext*> GetDeviceFromSwapChain(IDXGISwapChain* sc)
+{
+	ID3D11Device* dev;
+	ID3D11DeviceContext* ctx;
+	sc->GetDevice(IID_PPV_ARGS(&dev));
+	if (!dev)
+		return { nullptr, nullptr };
+
+	dev->GetImmediateContext(&ctx);
+	return { dev, ctx };
 }
 
 #define QUERY_VERSIONED_INTERFACE(Name_, Prefix_, Version_) \
