@@ -29,33 +29,35 @@ DECLARE_HOOK(D3D11CreateDeviceAndSwapChain)(
 	_Out_opt_ D3D_FEATURE_LEVEL* pFeatureLevel,
 	_COM_Outptr_opt_ ID3D11DeviceContext** ppImmediateContext)
 {
+	spdlog::debug("SwapChain initialization performed via D3D11CreateDeviceAndSwapChain.");
+
 	auto rval = RealD3D11CreateDeviceAndSwapChain(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, pSwapChainDesc, ppSwapChain, ppDevice, pFeatureLevel, ppImmediateContext);
-	if (SUCCEEDED(rval))
-		InitializeD3DObjects(*ppSwapChain);
+	if (SUCCEEDED(rval) && ppSwapChain)
+		InitializeSwapChain(*ppSwapChain);
 	return rval;
 }
 
-DECLARE_HOOK(CreateDXGIFactory)(REFIID riid, _COM_Outptr_ void** ppFactory)
+DECLARE_HOOK(CreateDXGIFactory)(REFIID riid, void** ppFactory)
 {
 	auto rval = RealCreateDXGIFactory(riid, ppFactory);
-	if(SUCCEEDED(rval))
-		OverwriteDXGIFactoryVTables(*ppFactory);
+	if (SUCCEEDED(rval) && ppFactory)
+		OverwriteDXGIFactoryVTables(GetFactoryPointer(riid, *ppFactory));
 	return rval;
 }
 
-DECLARE_HOOK(CreateDXGIFactory1)(REFIID riid, _COM_Outptr_ void** ppFactory)
+DECLARE_HOOK(CreateDXGIFactory1)(REFIID riid, void** ppFactory)
 {
 	auto rval = RealCreateDXGIFactory1(riid, ppFactory);
-	if (SUCCEEDED(rval))
-		OverwriteDXGIFactoryVTables(*ppFactory);
+	if (SUCCEEDED(rval) && ppFactory)
+		OverwriteDXGIFactoryVTables(GetFactoryPointer(riid, *ppFactory));
 	return rval;
 }
 
-DECLARE_HOOK(CreateDXGIFactory2)(UINT Flags, REFIID riid, _COM_Outptr_ void** ppFactory)
+DECLARE_HOOK(CreateDXGIFactory2)(UINT Flags, REFIID riid, void** ppFactory)
 {
 	auto rval = RealCreateDXGIFactory2(Flags, riid, ppFactory);
-	if (SUCCEEDED(rval))
-		OverwriteDXGIFactoryVTables(*ppFactory);
+	if (SUCCEEDED(rval) && ppFactory)
+		OverwriteDXGIFactoryVTables(GetFactoryPointer(riid, *ppFactory));
 	return rval;
 }
 
@@ -127,7 +129,7 @@ void InitializeD3DObjects(IDXGISwapChain* swc)
 			spdlog::error("Could not get device from swapchain!");
 
 		if (firstInit)
-			InitializeAddons(false);
+			Initialize(InitializationType::AfterSwapChainCreated, g_AssociatedWindow);
 	}
 }
 
@@ -172,6 +174,28 @@ std::pair<ID3D11Device*, ID3D11DeviceContext*> GetDeviceFromSwapChain(IDXGISwapC
 	return { dev, ctx };
 }
 
+IDXGIFactory* GetFactoryPointer(REFIID riid, void* factory)
+{
+	if (riid == __uuidof(IDXGIFactory))
+		return reinterpret_cast<IDXGIFactory*>(factory);
+	if (riid == __uuidof(IDXGIFactory1))
+		return reinterpret_cast<IDXGIFactory1*>(factory);
+	if (riid == __uuidof(IDXGIFactory2))
+		return reinterpret_cast<IDXGIFactory2*>(factory);
+	if (riid == __uuidof(IDXGIFactory3))
+		return reinterpret_cast<IDXGIFactory3*>(factory);
+	if (riid == __uuidof(IDXGIFactory4))
+		return reinterpret_cast<IDXGIFactory4*>(factory);
+	if (riid == __uuidof(IDXGIFactory5))
+		return reinterpret_cast<IDXGIFactory5*>(factory);
+	if (riid == __uuidof(IDXGIFactory6))
+		return reinterpret_cast<IDXGIFactory6*>(factory);
+	if (riid == __uuidof(IDXGIFactory7))
+		return reinterpret_cast<IDXGIFactory7*>(factory);
+	spdlog::critical("Could not recognize UUID {:X}-{:X}-{:X}-{:X} as IDXGIFactory child class!", riid.Data1, riid.Data2, riid.Data3, fmt::join(riid.Data4, ""));
+	return nullptr;
+}
+
 #define QUERY_VERSIONED_INTERFACE(Name_, Prefix_, Version_) \
 Prefix_##Name_##Version_* Get##Name_##Version_(Prefix_##Name_* obj) \
 { \
@@ -189,4 +213,5 @@ Prefix_##Name_* Downcast(Prefix_##Name_##Version_* obj) \
 QUERY_VERSIONED_INTERFACE(SwapChain, IDXGI, 1);
 QUERY_VERSIONED_INTERFACE(SwapChain, IDXGI, 3);
 
+QUERY_VERSIONED_INTERFACE(Factory, IDXGI, 1);
 QUERY_VERSIONED_INTERFACE(Factory, IDXGI, 2);

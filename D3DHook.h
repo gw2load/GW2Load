@@ -11,11 +11,14 @@ struct ID3D11DeviceContext;
 
 struct IDXGIFactory;
 
+IDXGIFactory* GetFactoryPointer(REFIID riid, void* factory);
+
+void InitializeSwapChain(IDXGISwapChain* sc);
 bool InitializeD3DHook();
 void InitializeD3DObjects(IDXGISwapChain* swc);
 void ShutdownD3DObjects(HWND hWnd);
-void OverwriteDXGIFactoryVTables(void* factory);
-void OverwriteSwapChainVTables(void* sc);
+void OverwriteDXGIFactoryVTables(IDXGIFactory* factory);
+void OverwriteSwapChainVTables(IDXGISwapChain* swc);
 std::pair<ID3D11Device*, ID3D11DeviceContext*> GetDeviceFromSwapChain(IDXGISwapChain* sc);
 void RestoreVTables();
 
@@ -31,6 +34,7 @@ Prefix_##Name_* Downcast(Prefix_##Name_##Version_* obj);
 QUERY_VERSIONED_INTERFACE(SwapChain, IDXGI, 1);
 QUERY_VERSIONED_INTERFACE(SwapChain, IDXGI, 3);
 
+QUERY_VERSIONED_INTERFACE(Factory, IDXGI, 1);
 QUERY_VERSIONED_INTERFACE(Factory, IDXGI, 2);
 
 #undef QUERY_VERSIONED_INTERFACE

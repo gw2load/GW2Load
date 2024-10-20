@@ -7,6 +7,7 @@ enum class InitializationType
     InLauncher = 0,
     BeforeFirstWindow = 1,
     BeforeGameWindow = 2,
+    AfterSwapChainCreated = 3,
 };
 
 void Initialize(InitializationType type, std::optional<HWND> hwnd);

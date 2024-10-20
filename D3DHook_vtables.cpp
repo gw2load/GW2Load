@@ -35,7 +35,6 @@ DECLARE_HOOK(IDXGISwapChain, SwapChain, Present)(
 	UINT SyncInterval,
 	UINT Flags)
 {
-	InitializeD3DObjects(This);
 	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(This);
 	auto returnValue = RealSwapChainPresent(This, SyncInterval, Flags);
 	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(This);
@@ -48,7 +47,6 @@ DECLARE_HOOK(IDXGISwapChain1, SwapChain1, Present1)(
 	UINT PresentFlags,
 	const DXGI_PRESENT_PARAMETERS* pPresentParameters)
 {
-	InitializeD3DObjects(reinterpret_cast<IDXGISwapChain*>(This));
 	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(Downcast(This));
 	auto returnValue = RealSwapChain1Present1(This, SyncInterval, PresentFlags, pPresentParameters);
 	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(Downcast(This));
@@ -91,9 +89,11 @@ DECLARE_HOOK(IDXGIFactory, Factory, CreateSwapChain)(
 	DXGI_SWAP_CHAIN_DESC* pDesc,
 	IDXGISwapChain** ppSwapChain)
 {
+	spdlog::debug("SwapChain initialization performed via IDXGIFactory::CreateSwapChain.");
+
 	auto rval = RealFactoryCreateSwapChain(This, pDevice, pDesc, ppSwapChain);
-	if (SUCCEEDED(rval))
-		OverwriteSwapChainVTables(*ppSwapChain);
+	if (SUCCEEDED(rval) && ppSwapChain)
+		InitializeSwapChain(*ppSwapChain);
 	return rval;
 }
 
@@ -104,9 +104,11 @@ DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForComposition)(
 	IDXGIOutput* pRestrictToOutput,
 	IDXGISwapChain1** ppSwapChain)
 {
+	spdlog::debug("SwapChain initialization performed via IDXGIFactory2::CreateSwapChainForComposition.");
+
 	auto rval = RealFactory2CreateSwapChainForComposition(This, pDevice, pDesc, pRestrictToOutput, ppSwapChain);
-	if (SUCCEEDED(rval))
-		OverwriteSwapChainVTables(*ppSwapChain);
+	if (SUCCEEDED(rval) && ppSwapChain)
+		InitializeSwapChain(Downcast(*ppSwapChain));
 	return rval;
 }
 
@@ -118,9 +120,11 @@ DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForCoreWindow)(
 	IDXGIOutput* pRestrictToOutput,
 	IDXGISwapChain1** ppSwapChain)
 {
+	spdlog::debug("SwapChain initialization performed via IDXGIFactory2::CreateSwapChainForCoreWindow.");
+
 	auto rval = RealFactory2CreateSwapChainForCoreWindow(This, pDevice, pWindow, pDesc, pRestrictToOutput, ppSwapChain);
-	if (SUCCEEDED(rval))
-		OverwriteSwapChainVTables(*ppSwapChain);
+	if (SUCCEEDED(rval) && ppSwapChain)
+		InitializeSwapChain(Downcast(*ppSwapChain));
 	return rval;
 }
 
@@ -133,22 +137,29 @@ DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForHwnd)(
 	IDXGIOutput* pRestrictToOutput,
 	IDXGISwapChain1** ppSwapChain)
 {
+	spdlog::debug("SwapChain initialization performed via IDXGIFactory2::CreateSwapChainForHwnd.");
+
 	auto rval = RealFactory2CreateSwapChainForHwnd(This, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
-	if (SUCCEEDED(rval))
-		OverwriteSwapChainVTables(*ppSwapChain);
+	if (SUCCEEDED(rval) && ppSwapChain)
+		InitializeSwapChain(Downcast(*ppSwapChain));
 	return rval;
 }
 
 using SwapChainVirtualTable = std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>;
 std::vector<SwapChainVirtualTable> g_SwapChainTables;
 
-void OverwriteSwapChainVTables(void* sc)
+void InitializeSwapChain(IDXGISwapChain* sc)
 {
-	if (!sc)
+	OverwriteSwapChainVTables(sc);
+	InitializeD3DObjects(sc);
+}
+
+void OverwriteSwapChainVTables(IDXGISwapChain* swapChain)
+{
+	if (!swapChain)
 		return;
 
 	spdlog::debug("Attempting to overwrite device/context/swapchain vtables...");
-	auto* swapChain = reinterpret_cast<IDXGISwapChain*>(sc);
 	auto [device, deviceContext] = GetDeviceFromSwapChain(swapChain);
 
 	auto* swapChainVT = swapChain->lpVtbl;
@@ -163,7 +174,7 @@ void OverwriteSwapChainVTables(void* sc)
 
 		g_SwapChainTables.push_back(swapChainVT);
 
-		auto* sc1 = GetSwapChain1(reinterpret_cast<IDXGISwapChain*>(sc));
+		auto* sc1 = GetSwapChain1(swapChain);
 		if (sc1)
 		{
 			spdlog::debug("SwapChain1 is available, checking...");
@@ -178,7 +189,7 @@ void OverwriteSwapChainVTables(void* sc)
 			}
 		}
 
-		auto* sc3 = GetSwapChain3(reinterpret_cast<IDXGISwapChain*>(sc));
+		auto* sc3 = GetSwapChain3(swapChain);
 		if (sc3)
 		{
 			spdlog::debug("SwapChain3 is available, checking...");
@@ -199,11 +210,11 @@ void OverwriteSwapChainVTables(void* sc)
 using DXGIFactoryVirtualTable = std::variant<IDXGIFactoryVtbl*, IDXGIFactory2Vtbl*>;
 std::vector<DXGIFactoryVirtualTable> g_DXGIFactoryTables;
 
-void OverwriteDXGIFactoryVTables(void* factory)
+void OverwriteDXGIFactoryVTables(IDXGIFactory* factory)
 {
 	spdlog::debug("Attempting to overwrite DXGI factory vtables...");
 
-	auto* factoryVT = reinterpret_cast<IDXGIFactory*>(factory)->lpVtbl;
+	auto* factoryVT = factory->lpVtbl;
 
 	if (std::ranges::find(g_DXGIFactoryTables, DXGIFactoryVirtualTable(factoryVT)) == g_DXGIFactoryTables.end())
 	{
@@ -213,7 +224,7 @@ void OverwriteDXGIFactoryVTables(void* factory)
 
 		g_DXGIFactoryTables.push_back(factoryVT);
 
-		auto* f2 = GetFactory2(reinterpret_cast<IDXGIFactory*>(factory));
+		auto* f2 = GetFactory2(factory);
 		if (f2)
 		{
 			spdlog::debug("DXGI factory 2 is available, checking...");

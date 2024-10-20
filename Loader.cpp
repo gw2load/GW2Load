@@ -785,6 +785,9 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
         break;
     case InitializationType::BeforeGameWindow:
         break;
+    case InitializationType::AfterSwapChainCreated:
+        InitializeAddons(false);
+        break;
     }
 }
 
