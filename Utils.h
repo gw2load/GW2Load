@@ -91,3 +91,36 @@ struct fmt::formatter<MH_STATUS> : fmt::formatter<int> {
         return fmt::formatter<int>::format(static_cast<int>(status), ctx);
     }
 };
+
+template<typename T>
+struct remove_const_recursive { using type = T; };
+
+template<typename T>
+struct remove_const_recursive<const volatile T> {
+    using type = volatile typename remove_const_recursive<T>::type;
+};
+
+template<typename T>
+struct remove_const_recursive<volatile T> {
+    using type = volatile typename remove_const_recursive<T>::type;
+};
+
+template<typename T>
+struct remove_const_recursive<const T> {
+    using type = typename remove_const_recursive<T>::type;
+};
+
+template<typename T>
+struct remove_const_recursive<T&> {
+    using type = typename remove_const_recursive<T>::type&;
+};
+
+template<typename T>
+struct remove_const_recursive<T*> {
+    using type = typename remove_const_recursive<T>::type*;
+};
+
+auto& MutCast(auto& value)
+{
+    return const_cast<remove_const_recursive<decltype(value)>::type>(value);
+}

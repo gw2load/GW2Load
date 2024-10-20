@@ -83,6 +83,80 @@ DECLARE_HOOK(IDXGISwapChain3, SwapChain3, ResizeBuffers1)(
 	return returnValue;
 }
 
+DECLARE_HOOK(ID3D11Device, Device, CreateBuffer)(
+	ID3D11Device* This,
+	const D3D11_BUFFER_DESC* pDesc,
+	const D3D11_SUBRESOURCE_DATA* pInitialData,
+	ID3D11Buffer** ppBuffer)
+{
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateBuffer, GW2Load_CallbackPoint::BeforeCall, GW2Load_CreateBufferCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppBuffer);
+	auto returnValue = RealDeviceCreateBuffer(This, pDesc, pInitialData, ppBuffer);
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateBuffer, GW2Load_CallbackPoint::AfterCall, GW2Load_CreateBufferCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppBuffer);
+	return returnValue;
+}
+
+DECLARE_HOOK(ID3D11Device, Device, CreateTexture1D)(
+	ID3D11Device* This,
+	const D3D11_TEXTURE1D_DESC* pDesc,
+	const D3D11_SUBRESOURCE_DATA* pInitialData,
+	ID3D11Texture1D** ppTexture1D)
+{
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateTexture1D, GW2Load_CallbackPoint::BeforeCall, GW2Load_CreateTexture1DCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppTexture1D);
+	auto returnValue = RealDeviceCreateTexture1D(This, pDesc, pInitialData, ppTexture1D);
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateTexture1D, GW2Load_CallbackPoint::AfterCall, GW2Load_CreateTexture1DCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppTexture1D);
+	return returnValue;
+}
+
+DECLARE_HOOK(ID3D11Device, Device, CreateTexture2D)(
+	ID3D11Device* This,
+	const D3D11_TEXTURE2D_DESC* pDesc,
+	const D3D11_SUBRESOURCE_DATA* pInitialData,
+	ID3D11Texture2D** ppTexture2D)
+{
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateTexture2D, GW2Load_CallbackPoint::BeforeCall, GW2Load_CreateTexture2DCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppTexture2D);
+	auto returnValue = RealDeviceCreateTexture2D(This, pDesc, pInitialData, ppTexture2D);
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateTexture2D, GW2Load_CallbackPoint::AfterCall, GW2Load_CreateTexture2DCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppTexture2D);
+	return returnValue;
+}
+
+DECLARE_HOOK(ID3D11Device, Device, CreateTexture3D)(
+	ID3D11Device* This,
+	const D3D11_TEXTURE3D_DESC* pDesc,
+	const D3D11_SUBRESOURCE_DATA* pInitialData,
+	ID3D11Texture3D** ppTexture3D)
+{
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateTexture3D, GW2Load_CallbackPoint::BeforeCall, GW2Load_CreateTexture3DCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppTexture3D);
+	auto returnValue = RealDeviceCreateTexture3D(This, pDesc, pInitialData, ppTexture3D);
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateTexture3D, GW2Load_CallbackPoint::AfterCall, GW2Load_CreateTexture3DCallback>(This, MutCast(pDesc), MutCast(pInitialData), ppTexture3D);
+	return returnValue;
+}
+
+DECLARE_HOOK(ID3D11Device, Device, CreatePixelShader)(
+	ID3D11Device* This,
+	const void* pShaderBytecode,
+	SIZE_T BytecodeLength,
+	ID3D11ClassLinkage* pClassLinkage,
+	ID3D11PixelShader** ppPixelShader)
+{
+	InvokeAPIHooks<GW2Load_HookedFunction::CreatePixelShader, GW2Load_CallbackPoint::BeforeCall, GW2Load_CreatePixelShaderCallback>(This, MutCast(pShaderBytecode), BytecodeLength, pClassLinkage, ppPixelShader);
+	auto returnValue = RealDeviceCreatePixelShader(This, pShaderBytecode, BytecodeLength, pClassLinkage, ppPixelShader);
+	InvokeAPIHooks<GW2Load_HookedFunction::CreatePixelShader, GW2Load_CallbackPoint::AfterCall, GW2Load_CreatePixelShaderCallback>(This, MutCast(pShaderBytecode), BytecodeLength, pClassLinkage, ppPixelShader);
+	return returnValue;
+}
+
+DECLARE_HOOK(ID3D11Device, Device, CreateVertexShader)(
+	ID3D11Device* This,
+	const void* pShaderBytecode,
+	SIZE_T BytecodeLength,
+	ID3D11ClassLinkage* pClassLinkage,
+	ID3D11VertexShader** ppVertexShader)
+{
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateVertexShader, GW2Load_CallbackPoint::BeforeCall, GW2Load_CreateVertexShaderCallback>(This, MutCast(pShaderBytecode), BytecodeLength, pClassLinkage, ppVertexShader);
+	auto returnValue = RealDeviceCreateVertexShader(This, pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
+	InvokeAPIHooks<GW2Load_HookedFunction::CreateVertexShader, GW2Load_CallbackPoint::AfterCall, GW2Load_CreateVertexShaderCallback>(This, MutCast(pShaderBytecode), BytecodeLength, pClassLinkage, ppVertexShader);
+	return returnValue;
+}
+
 DECLARE_HOOK(IDXGIFactory, Factory, CreateSwapChain)(
 	IDXGIFactory* This,
 	IUnknown* pDevice,
@@ -147,6 +221,7 @@ DECLARE_HOOK(IDXGIFactory2, Factory2, CreateSwapChainForHwnd)(
 
 using SwapChainVirtualTable = std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>;
 std::vector<SwapChainVirtualTable> g_SwapChainTables;
+std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
 
 void InitializeSwapChain(IDXGISwapChain* sc)
 {
@@ -163,9 +238,6 @@ void OverwriteSwapChainVTables(IDXGISwapChain* swapChain)
 	auto [device, deviceContext] = GetDeviceFromSwapChain(swapChain);
 
 	auto* swapChainVT = swapChain->lpVtbl;
-	auto* deviceVT = device->lpVtbl;
-	auto* contextVT = deviceContext->lpVtbl;
-
 	if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChainVT)) == g_SwapChainTables.end())
 	{
 		spdlog::debug("SwapChain vtable is new: hooking!");
@@ -203,8 +275,22 @@ void OverwriteSwapChainVTables(IDXGISwapChain* swapChain)
 				g_SwapChainTables.push_back(swapChain3VT);
 			}
 		}
-
 	}
+
+	auto* deviceVT = device->lpVtbl;
+	if (std::ranges::find(g_DeviceTables, deviceVT) == g_DeviceTables.end())
+	{
+		spdlog::debug("Device vtable is new: hooking!");
+
+		HOOK_FUNCTION(deviceVT->CreateBuffer, DeviceCreateBuffer);
+		HOOK_FUNCTION(deviceVT->CreateTexture1D, DeviceCreateTexture1D);
+		HOOK_FUNCTION(deviceVT->CreateTexture2D, DeviceCreateTexture2D);
+		HOOK_FUNCTION(deviceVT->CreateTexture3D, DeviceCreateTexture3D);
+		HOOK_FUNCTION(deviceVT->CreatePixelShader, DeviceCreatePixelShader);
+		HOOK_FUNCTION(deviceVT->CreateVertexShader, DeviceCreateVertexShader);
+	}
+
+	auto* contextVT = deviceContext->lpVtbl;
 }
 
 using DXGIFactoryVirtualTable = std::variant<IDXGIFactoryVtbl*, IDXGIFactory2Vtbl*>;

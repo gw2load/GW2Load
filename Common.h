@@ -40,12 +40,12 @@ struct PriorityCallback
 };
 extern std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
 
-template<GW2Load_HookedFunction Function, GW2Load_CallbackPoint Point, typename CallbackType, typename... Args>
-void InvokeAPIHooks(Args&& ...args)
+template<GW2Load_HookedFunction Function, GW2Load_CallbackPoint Point, typename CallbackType, typename This, typename... Args>
+void InvokeAPIHooks(This* this_, Args& ...args)
 {
     constexpr auto idx = GetIndex(Function, Point);
     for (auto&& [priority, cb] : g_Callbacks[idx])
-        reinterpret_cast<CallbackType>(cb)(std::forward<Args>(args)...);
+        reinterpret_cast<CallbackType>(cb)(this_, args...);
 }
 
 bool IsAttachedToGame();

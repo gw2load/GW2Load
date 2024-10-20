@@ -86,8 +86,15 @@ inline static constexpr GW2Load_Version_t GW2Load_CurrentAddonAPIVersion = GW2Lo
 enum class GW2Load_HookedFunction : unsigned int
 {
     Undefined = 0, // Reserved, do not use
-    Present, // void Present(IDXGISwapChain* swapChain);
-    ResizeBuffers, // void ResizeBuffers(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
+    Present, // void Present(IDXGISwapChain* swapChain)
+    ResizeBuffers, // void ResizeBuffers(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format)
+
+    CreateBuffer, // void CreateBuffer(ID3D11Device* This, D3D11_BUFFER_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer)
+    CreateTexture1D, // void CreateTexture1D(ID3D11Device* This, D3D11_TEXTURE1D_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture1D** ppTexture1D)
+    CreateTexture2D, // void CreateTexture2D(ID3D11Device* This, D3D11_TEXTURE2D_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D)
+    CreateTexture3D, // void CreateTexture3D(ID3D11Device* This, D3D11_TEXTURE3D_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture3D** ppTexture3D)
+    CreatePixelShader, // void CreatePixelShader(ID3D11Device* This, void* pShaderBytecode, SIZE_T& BytecodeLength, ID3D11ClassLinkage* pClassLinkage, ID3D11PixelShader** ppPixelShader)
+    CreateVertexShader, // void CreateVertexShader(ID3D11Device* This, void* pShaderBytecode, SIZE_T& BytecodeLength, ID3D11ClassLinkage* pClassLinkage, ID3D11VertexShader** ppVertexShader)
 
     Count
 };
@@ -104,6 +111,13 @@ enum class GW2Load_CallbackPoint : unsigned int
 using GW2Load_GenericCallback = void(__cdecl*)(); // Used as a placeholder for the actual function signature, see enum
 using GW2Load_PresentCallback = void(__cdecl*)(IDXGISwapChain* swapChain);
 using GW2Load_ResizeBuffersCallback = void(__cdecl*)(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
+
+using GW2Load_CreateBufferCallback = void(__cdecl*)(ID3D11Device* device, D3D11_BUFFER_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer);
+using GW2Load_CreateTexture1DCallback = void(__cdecl*)(ID3D11Device* This, D3D11_TEXTURE1D_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture1D** ppTexture1D);
+using GW2Load_CreateTexture2DCallback = void(__cdecl*)(ID3D11Device* This, D3D11_TEXTURE2D_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D);
+using GW2Load_CreateTexture3DCallback = void(__cdecl*)(ID3D11Device* This, D3D11_TEXTURE3D_DESC* pDesc, D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture3D** ppTexture3D);
+using GW2Load_CreatePixelShaderCallback = void(__cdecl*)(ID3D11Device* This, void* pShaderBytecode, SIZE_T& BytecodeLength, ID3D11ClassLinkage* pClassLinkage, ID3D11PixelShader** ppPixelShader);
+using GW2Load_CreateVertexShaderCallback = void(__cdecl*)(ID3D11Device* This, void* pShaderBytecode, SIZE_T& BytecodeLength, ID3D11ClassLinkage* pClassLinkage, ID3D11VertexShader** ppVertexShader);
 
 using GW2Load_RegisterCallback = void(__cdecl*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
 using GW2Load_UpdateCallback = void(__cdecl*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
