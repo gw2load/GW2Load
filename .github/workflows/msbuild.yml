@@ -38,7 +38,7 @@ jobs:
         submodules: 'recursive'
 
     - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.2
+      uses: microsoft/setup-msbuild@v2
 
     - name: Export GitHub Actions cache environment variables
       uses: actions/github-script@v7
