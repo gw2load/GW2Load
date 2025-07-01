@@ -10,6 +10,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  release:
+    types: [created]
   workflow_dispatch:
 
 env:
@@ -31,6 +33,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+
+    # skip everything if someone created a proper release directly
+    if: github.event_name != 'release' || github.event.release.draft == true
 
     steps:
     - uses: actions/checkout@v4
@@ -63,7 +68,15 @@ jobs:
 
     - name: Save nightly build from main
       uses: actions/upload-artifact@v4
+      if: github.event_name != 'release'
       with:
         name: nightly-${{ github.sha }}
         path: |
           x64/Release/msimg32.dll
+
+    - name: Save build to release
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'release'
+      with:
+        path: x64/Release/msimg32.dll
+        token: ${{ secrets.GITHUB_TOKEN }}
