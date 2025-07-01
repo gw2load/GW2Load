@@ -13,8 +13,10 @@ if($LASTEXITCODE -ne 0) {
     $dirty = $dirty -or $uncommittedChanges
 }
 
+$run_number = $env:GITHUB_RUN_NUMBER ?? "1"
+
 $gitVer = $latestTag.Replace('.', ',')
-$gitVer += "," + ($dirty ? "1" : "0")
+$gitVer += "," + ($dirty ? $run_number : "0")
 
 $dirtySuffix = ""
 if($dirty)
