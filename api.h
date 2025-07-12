@@ -106,6 +106,7 @@ using GW2Load_PresentCallback = void(__cdecl*)(IDXGISwapChain* swapChain);
 using GW2Load_ResizeBuffersCallback = void(__cdecl*)(IDXGISwapChain* swapChain, unsigned int width, unsigned int height, DXGI_FORMAT format);
 
 using GW2Load_RegisterCallback = void(__cdecl*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
+using GW2Load_DeregisterCallback = void(__cdecl*)(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
 using GW2Load_UpdateCallback = void(__cdecl*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 
 struct GW2Load_API
@@ -117,9 +118,17 @@ struct GW2Load_API
         GW2Load_GenericCallback cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
         registerCallback(func, priority, callbackPoint, cb);
     }
+
+    template<typename F>
+    auto DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, F callback)
+    {
+        GW2Load_GenericCallback cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
+        deregisterCallback(func, callbackPoint, cb);
+    }
 protected:
 #endif
     GW2Load_RegisterCallback registerCallback;
+    GW2Load_DeregisterCallback deregisterCallback;
 };
 
 struct GW2Load_UpdateAPI

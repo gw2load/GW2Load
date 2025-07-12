@@ -425,7 +425,7 @@ void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_Callbac
 {
     const std::string& name = GetAddonNameFromAddress();
 
-    spdlog::debug("Registering callback for {}: func={} priority={}, callbackPoint={}, callback={}",
+    spdlog::debug("Registering callback for {}: func={}, priority={}, callbackPoint={}, callback={}",
         name, func, priority, callbackPoint, fptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
@@ -450,6 +450,37 @@ void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_Callbac
     // add elements sorted into the vector
     auto it = std::ranges::upper_bound(callbacks.callbacks, priority, std::greater{}, &PriorityCallback::priority);
 	callbacks.callbacks.emplace(it, priority, callback);
+}
+
+void DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
+{
+	const std::string& name = GetAddonNameFromAddress();
+
+    spdlog::debug("Deregistering callback for {}: func={}, callbackPoint={}, callback={}",
+        name, func, callbackPoint, fptr(callback));
+
+    if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
+    {
+        spdlog::error("Error when deregistering callback for {}: invalid function {}.", name, func);
+        return;
+    }
+    if (callbackPoint == GW2Load_CallbackPoint::Undefined || callbackPoint >= GW2Load_CallbackPoint::Count)
+    {
+        spdlog::error("Error when deregistering callback for {} at function {}: invalid callback point {}.", name, func, callbackPoint);
+        return;
+    }
+    if (callback == nullptr)
+    {
+        spdlog::error("Error when deregistering callback for {} at function {} point {}: null callback.", name, func, callbackPoint);
+        return;
+    }
+
+    const auto idx = GetIndex(func, callbackPoint);
+    auto& callbacks = g_Callbacks[idx];
+    std::lock_guard guard(callbacks.lock);
+    // remove element from the vector
+    const auto& [first, last] = std::ranges::remove(callbacks.callbacks, callback, &PriorityCallback::callback);
+    callbacks.callbacks.erase(first, last);
 }
 
 template<typename F, typename... Args> requires (!std::is_void_v<std::invoke_result_t<F>> && !std::is_same_v<bool, std::invoke_result_t<F>>)
@@ -511,14 +542,15 @@ void UpdateNotificationCallback(void* data, unsigned int sizeInBytes, bool dataI
 
 struct GW2Load_API_Internal : public GW2Load_API
 {
-    GW2Load_API_Internal(GW2Load_RegisterCallback cb)
+    GW2Load_API_Internal(GW2Load_RegisterCallback register_callback, GW2Load_DeregisterCallback deregister_callback)
     {
-        registerCallback = cb;
+        registerCallback = register_callback;
+        deregisterCallback = deregister_callback;
     }
 };
 
 namespace {
-	GW2Load_API_Internal api{ RegisterCallback };
+	GW2Load_API_Internal api{ RegisterCallback, DeregisterCallback };
 }
 
 bool InitializeAddon(AddonData& addon, bool launcher)
