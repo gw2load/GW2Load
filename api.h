@@ -57,13 +57,13 @@
 *
 *   using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 *   void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
-*       If the export is defined, UpdateCheck will be called *before* GetAddonAPIVersion to alllow the addon the opportunity to self-update.
+*       If the export is defined, UpdateCheck will be called *before* GetAddonAPIVersion to allow the addon the opportunity to self-update.
 *       The provided callback may be called by the addon to signal to the loader that an update is pending.
 *       The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
 *       Two interpretations of the data buffer are available:
-*         - If dataIsfileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
+*         - If dataIsFileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
 *           The addon will be unloaded and replaced with the new file, then reloaded.
-*         - If dataIsfileName is false, then data is assumed to contain the new DLL's binary data in full.
+*         - If dataIsFileName is false, then data is assumed to contain the new DLL's binary data in full.
 *           The addon will be unloaded and overwritten by the new data, then reloaded.
 *       These calls are asynchronous: if UpdateCheck exists, a thread will be spawned to perform the update check for each addon in parallel.
 *       All UpdateCheck threads will be killed at most two seconds after the launcher is closed and the affected addons will be unloaded.
@@ -155,8 +155,19 @@ struct GW2Load_EnumeratedAddon
     const bool isEnabled;
 };
 
+enum GW2Load_LogLevel : int
+{
+    trace = 0,
+    debug = 1,
+    info = 2,
+    warn = 3,
+    err = 4,
+    critical = 5,
+};
+
 extern "C"
 {
     GW2LOAD_EXPORT GW2Load_EnumeratedAddon* GW2Load_GetAddonsInDirectory(const char* directory, unsigned int* count, const char* pattern);
     GW2LOAD_EXPORT bool GW2Load_CheckIfAddon(const char* path);
+	GW2LOAD_EXPORT void GW2Load_Log(GW2Load_LogLevel level, const char* message, size_t messageSize);
 }

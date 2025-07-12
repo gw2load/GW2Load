@@ -9,6 +9,7 @@
 #include <memory>
 #include <span>
 #include <cwctype>
+#include <ranges>
 
 #define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
 // Windows Header Files
@@ -37,14 +38,24 @@ struct PriorityCallback
     int priority;
     GW2Load_GenericCallback callback;
 };
-extern std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
+
+struct CallbackElement
+{
+	std::mutex lock;
+    std::vector<PriorityCallback> callbacks;
+};
+extern std::unordered_map<CallbackIndex, CallbackElement> g_Callbacks;
 
 template<GW2Load_HookedFunction Function, GW2Load_CallbackPoint Point, typename CallbackType, typename... Args>
 void InvokeAPIHooks(Args&& ...args)
 {
     constexpr auto idx = GetIndex(Function, Point);
-    for (auto&& [priority, cb] : g_Callbacks[idx])
+    auto& callbacks = g_Callbacks[idx];
+
+	std::lock_guard guard(callbacks.lock);
+    for (auto&& [priority, cb] : callbacks.callbacks) {
         reinterpret_cast<CallbackType>(cb)(std::forward<Args>(args)...);
+    }
 }
 
 bool IsAttachedToGame();

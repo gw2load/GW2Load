@@ -7,7 +7,7 @@
 #include <regex>
 
 bool g_Quit = false;
-std::unordered_map<CallbackIndex, std::vector<PriorityCallback>> g_Callbacks;
+std::unordered_map<CallbackIndex, CallbackElement> g_Callbacks;
 
 template<>
 struct fmt::formatter<GW2Load_HookedFunction> : fmt::formatter<std::string_view> {
@@ -397,30 +397,59 @@ extern "C" __declspec(dllexport) bool GW2Load_CheckIfAddon(const char* path)
         return false;
 }
 
-AddonData* g_CallbackAddon = nullptr;
+// extern "C" __declspec(dllexport) void GW2Load_Log(GW2Load_LogLevel level, const char* message)
+// {
+// 	spdlog::log(static_cast<spdlog::level::level_enum>(level), message);
+// }
+
+const std::string& GetAddonNameFromAddress(void* address = _ReturnAddress())
+{
+    HMODULE mod;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (char*)address, &mod) == false)
+    {
+	    spdlog::warn("GetModuleNameFromAddress: could not retrieve module handle for {}.", fmt::ptr(address));
+        return "unknown";
+    }
+
+    auto&& addonIt = std::ranges::find(g_Addons, mod, &AddonData::handle);
+    if (addonIt != g_Addons.end())
+    {
+        return addonIt->name;
+    }
+
+    spdlog::warn("GetModuleNameFromAddress: could not find module handle '{}' in addons.", fmt::ptr(mod));
+    return "unknown";
+}
+
 void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
+    const std::string& name = GetAddonNameFromAddress();
+
     spdlog::debug("Registering callback for {}: func={} priority={}, callbackPoint={}, callback={}",
-        g_CallbackAddon->name, func, priority, callbackPoint, fptr(callback));
+        name, func, priority, callbackPoint, fptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
     {
-        spdlog::error("Error when registering callback for {}: invalid function {}.", g_CallbackAddon->name, func);
+        spdlog::error("Error when registering callback for {}: invalid function {}.", name, func);
         return;
     }
     if (callbackPoint == GW2Load_CallbackPoint::Undefined || callbackPoint >= GW2Load_CallbackPoint::Count)
     {
-        spdlog::error("Error when registering callback for {} at function {}: invalid callback point {}.", g_CallbackAddon->name, func, callbackPoint);
+        spdlog::error("Error when registering callback for {} at function {}: invalid callback point {}.", name, func, callbackPoint);
         return;
     }
     if (callback == nullptr)
     {
-        spdlog::error("Error when registering callback for {} at function {} point {}: null callback.", g_CallbackAddon->name, func, callbackPoint);
+        spdlog::error("Error when registering callback for {} at function {} point {}: null callback.", name, func, callbackPoint);
         return;
     }
 
     const auto idx = GetIndex(func, callbackPoint);
-    g_Callbacks[idx].emplace_back(priority, callback);
+    auto& callbacks = g_Callbacks[idx];
+    std::lock_guard guard(callbacks.lock);
+    // add elements sorted into the vector
+    auto it = std::ranges::upper_bound(callbacks.callbacks, priority, std::greater{}, &PriorityCallback::priority);
+	callbacks.callbacks.emplace(it, priority, callback);
 }
 
 template<typename F, typename... Args> requires (!std::is_void_v<std::invoke_result_t<F>> && !std::is_same_v<bool, std::invoke_result_t<F>>)
@@ -488,11 +517,13 @@ struct GW2Load_API_Internal : public GW2Load_API
     }
 };
 
+namespace {
+	GW2Load_API_Internal api{ RegisterCallback };
+}
+
 bool InitializeAddon(AddonData& addon, bool launcher)
 {
     spdlog::debug("Initializing addon {}...", addon.name);
-
-    GW2Load_API_Internal api{ RegisterCallback };
 
     auto onError = [&]<typename... Args>(spdlog::format_string_t<Args...> fmt, Args&& ...args) {
         return [&] {
@@ -530,7 +561,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (addon.hasUpdateCheck)
                 addon.updateCheck = reinterpret_cast<GW2Load_UpdateCheck_t>(GetProcAddress(addon.handle, "GW2Load_UpdateCheck"));
 
-#define PRINT_SYM(sym, addr) if(addon.has##sym) spdlog::debug("Addon {} export {} has address {}.", addon.name, #sym, reinterpret_cast<void*>(addon.addr));
+#define PRINT_SYM(sym, addr) if(addon.has##sym) spdlog::debug("Addon {} export {} has address {}.", addon.name, #sym, reinterpret_cast<void*>(addon.addr))
 
             PRINT_SYM(GetAddonAPIVersion, getAddonAPIVersion);
             PRINT_SYM(OnLoad, onLoad);
@@ -607,7 +638,6 @@ bool InitializeAddon(AddonData& addon, bool launcher)
     if (launcher && addon.onLoadLauncher)
     {
         spdlog::debug("Calling addon {} OnLoadLauncher...", addon.name);
-        g_CallbackAddon = &addon;
 
         if (!SafeCall(
             [&] {
@@ -618,14 +648,12 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             return onError("Addon {} OnLoadLauncher signaled a problem, unloading...", addon.name)();
         }
 
-        g_CallbackAddon = nullptr;
         spdlog::debug("Addon {} OnLoadLauncher called.", addon.name);
     }
 
     if (!launcher && addon.onLoad)
     {
         spdlog::debug("Calling addon {} OnLoad...", addon.name);
-        g_CallbackAddon = &addon;
 
         if (!SafeCall(
             [&] {
@@ -636,7 +664,6 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             return onError("Addon {} OnLoad signaled a problem, unloading...", addon.name)();
         }
 
-        g_CallbackAddon = nullptr;
         spdlog::debug("Addon {} OnLoad called.", addon.name);
     }
 
@@ -740,12 +767,6 @@ void InitializeAddons(bool launcher)
                 UpdateAddon(addon);
             });
     }
-
-    if (!launcher)
-    {
-        for (auto&& [i, cbs] : g_Callbacks)
-            std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
-    }
 }
 
 void ShutdownAddons()
@@ -831,7 +852,4 @@ void LauncherClosing(HWND hwnd)
         spdlog::default_logger()->flush();
         std::terminate();
     }
-
-    for (auto&& [i, cbs] : g_Callbacks)
-        std::ranges::sort(cbs, std::greater{}, &PriorityCallback::priority);
 }
