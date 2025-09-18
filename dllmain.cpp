@@ -50,7 +50,7 @@ LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
             }
         }
     }
-    return CallNextHookEx(0, nCode, wParam, lParam);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 bool IsAttachedToGame()
@@ -76,7 +76,7 @@ FUNC_EXPORT(TransparentBlt, BOOL, (HDC hdcDest, int xoriginDest, int yoriginDest
 
 
 #define FUNC_LOAD(Name_) \
-    g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_MSIMG32Handle, #Name_));
+    g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_MSIMG32Handle, #Name_))
 
 std::shared_ptr<spdlog::logger> g_Logger;
 
@@ -134,7 +134,14 @@ void Init()
     std::filesystem::create_directories("addons/_logs/GW2Load");
     auto outputLogger = std::make_shared<spdlog::sinks::msvc_sink_mt>(true);
     outputLogger->set_pattern("[GW2Load>%l|%T.%f] %v");
-    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_mt>("addons/_logs/GW2Load/GW2Load.log", 100_kb, 10, true);
+
+#ifdef _DEBUG
+    auto max_log_size = 1_mb;
+#else
+    auto max_log_size = 100_kb;
+#endif
+
+    auto fileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_mt>("addons/_logs/GW2Load/GW2Load.log", max_log_size, 10, true);
     fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
     g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
     spdlog::set_default_logger(g_Logger);

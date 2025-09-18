@@ -3,6 +3,7 @@
 #include "Utils.h"
 #include <dbghelp.h>
 #include <d3d11_1.h>
+#include <fstream>
 #include <future>
 #include <regex>
 
@@ -83,17 +84,14 @@ struct AddonData
     GW2Load_Version_t apiVersion = 0;
     std::string addonVersionString;
 
+    std::chrono::system_clock::time_point updateStartTime;
+    std::future<void> updateFuture;
     std::vector<unsigned char> updateData;
     bool updateDataIsFileName = false;
 };
 
 std::vector<AddonData> g_Addons;
 bool g_AddonsInitialized = false;
-
-std::vector<AddonData*> g_DelayedAddons;
-std::mutex g_DelayedAddonsTimesMutex;
-std::vector<std::chrono::system_clock::time_point> g_DelayedAddonsTimes;
-std::future<void> g_DelayedAddonsManagerFuture;
 
 BOOL CALLBACK EnumSymProc(
     PSYMBOL_INFO pSymInfo,
@@ -397,33 +395,40 @@ extern "C" __declspec(dllexport) bool GW2Load_CheckIfAddon(const char* path)
         return false;
 }
 
-// extern "C" __declspec(dllexport) void GW2Load_Log(GW2Load_LogLevel level, const char* message)
-// {
-// 	spdlog::log(static_cast<spdlog::level::level_enum>(level), message);
-// }
-
-const std::string& GetAddonNameFromAddress(void* address = _ReturnAddress())
+// TODO: use std::optional instead, when it is implemented in C++26
+AddonData* GetAddonFromAddress(void* address = _ReturnAddress())
 {
     HMODULE mod;
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (char*)address, &mod) == false)
     {
-	    spdlog::warn("GetModuleNameFromAddress: could not retrieve module handle for {}.", fmt::ptr(address));
-        return "unknown";
+        spdlog::warn("GetModuleNameFromAddress: could not retrieve module handle for {}.", fmt::ptr(address));
+        return nullptr;
     }
 
     auto&& addonIt = std::ranges::find(g_Addons, mod, &AddonData::handle);
     if (addonIt != g_Addons.end())
     {
-        return addonIt->name;
+        return &*addonIt;
     }
 
     spdlog::warn("GetModuleNameFromAddress: could not find module handle '{}' in addons.", fmt::ptr(mod));
+    return nullptr;
+}
+
+const std::string_view GetAddonNameFromAddress(void* address = _ReturnAddress())
+{
+    auto* data = GetAddonFromAddress(address);
+    if (data)
+    {
+        return data->name;
+    }
+
     return "unknown";
 }
 
 void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
-    const std::string& name = GetAddonNameFromAddress();
+    const auto name = GetAddonNameFromAddress();
 
     spdlog::debug("Registering callback for {}: func={}, priority={}, callbackPoint={}, callback={}",
         name, func, priority, callbackPoint, fptr(callback));
@@ -449,12 +454,12 @@ void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_Callbac
     std::lock_guard guard(callbacks.lock);
     // add elements sorted into the vector
     auto it = std::ranges::upper_bound(callbacks.callbacks, priority, std::greater{}, &PriorityCallback::priority);
-	callbacks.callbacks.emplace(it, priority, callback);
+    callbacks.callbacks.emplace(it, priority, callback);
 }
 
 void DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
-	const std::string& name = GetAddonNameFromAddress();
+    const auto name = GetAddonNameFromAddress();
 
     spdlog::debug("Deregistering callback for {}: func={}, callbackPoint={}, callback={}",
         name, func, callbackPoint, fptr(callback));
@@ -483,7 +488,14 @@ void DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callb
     callbacks.callbacks.erase(first, last);
 }
 
-template<typename F, typename... Args> requires (!std::is_void_v<std::invoke_result_t<F>> && !std::is_same_v<bool, std::invoke_result_t<F>>)
+void LogCallback(GW2Load_LogLevel level, const char* message)
+{
+    const auto name = GetAddonNameFromAddress();
+    spdlog::log(static_cast<spdlog::level::level_enum>(level), "{}|{}", name, message);
+}
+
+template<typename F, typename... Args>
+requires (!std::is_void_v<std::invoke_result_t<F>> && !std::is_same_v<bool, std::invoke_result_t<F>>)
 std::optional<std::invoke_result_t<F>> SafeCall(F&& func, auto&& err)
 {
     __try
@@ -498,7 +510,8 @@ std::optional<std::invoke_result_t<F>> SafeCall(F&& func, auto&& err)
     return std::nullopt;
 }
 
-template<typename F, typename... Args> requires std::is_void_v<std::invoke_result_t<F>>
+template<typename F, typename... Args>
+requires std::is_void_v<std::invoke_result_t<F>>
 bool SafeCall(F&& func, auto&& err)
 {
     __try
@@ -514,7 +527,8 @@ bool SafeCall(F&& func, auto&& err)
     return false;
 }
 
-template<typename F, typename... Args> requires std::is_same_v<bool, std::invoke_result_t<F>>
+template<typename F, typename... Args>
+requires std::is_same_v<bool, std::invoke_result_t<F>>
 bool SafeCall(F&& func, auto&& err)
 {
     __try
@@ -529,15 +543,15 @@ bool SafeCall(F&& func, auto&& err)
     return false;
 }
 
-AddonData* g_UpdateAddon = nullptr;
 void UpdateNotificationCallback(void* data, unsigned int sizeInBytes, bool dataIsFileName)
 {
-    if (!g_UpdateAddon || sizeInBytes == 0)
+    auto* addon = GetAddonFromAddress();
+    if (!addon || sizeInBytes == 0)
         return;
 
     auto* src = static_cast<const unsigned char*>(data);
-    g_UpdateAddon->updateData.assign(src, src + sizeInBytes);
-    g_UpdateAddon->updateDataIsFileName = dataIsFileName;
+    addon->updateData.assign(src, src + sizeInBytes);
+    addon->updateDataIsFileName = dataIsFileName;
 }
 
 struct GW2Load_API_Internal : public GW2Load_API
@@ -550,7 +564,7 @@ struct GW2Load_API_Internal : public GW2Load_API
 };
 
 namespace {
-	GW2Load_API_Internal api{ RegisterCallback, DeregisterCallback };
+    GW2Load_API_Internal api{ RegisterCallback, DeregisterCallback };
 }
 
 bool InitializeAddon(AddonData& addon, bool launcher)
@@ -607,7 +621,6 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             // Only do the update check on the initial addon load pass, not on subsequent calls to InitializeAddon from the self-update process
             if (addon.updateCheck && !g_AddonsInitialized)
             {
-                g_DelayedAddons.emplace_back(&addon);
                 return false;
             }
         }
@@ -702,83 +715,79 @@ bool InitializeAddon(AddonData& addon, bool launcher)
     return true;
 }
 
-void UpdateAddon(AddonData* addon)
+void UpdateAddon(AddonData& addon)
 {
-    GW2Load_UpdateAPI api{ UpdateNotificationCallback };
-    g_UpdateAddon = addon;
-    {
-        std::scoped_lock lock(g_DelayedAddonsTimesMutex);
-        g_DelayedAddonsTimes.push_back(std::chrono::system_clock::now());
-    }
+    GW2Load_UpdateAPI updateApi{ UpdateNotificationCallback };
 
-    spdlog::info("Checking for updates for addon {}...", addon->file.string());
-    Cleanup cleanAddon([] {
-        std::scoped_lock lock(g_DelayedAddonsTimesMutex);
-        g_DelayedAddonsTimes.push_back(std::chrono::system_clock::now());
-        auto dt = g_DelayedAddonsTimes.back() - g_DelayedAddonsTimes[g_DelayedAddonsTimes.size() - 2];
-        spdlog::info("Update check for addon {} complete, took {}.", g_UpdateAddon->file.string(),
+    addon.updateStartTime = std::chrono::system_clock::now();
+
+    spdlog::info("Checking for updates for addon {}...", addon.file.string());
+
+    Cleanup cleanAddon([&addon] {
+        auto currentTime = std::chrono::system_clock::now();
+        auto dt = currentTime - addon.updateStartTime;
+        spdlog::info("Update check for addon {} complete, took {}.", addon.file.string(),
             static_cast<float>(std::chrono::duration_cast<std::chrono::milliseconds>(dt).count()) / 1000.f);
-        g_UpdateAddon = nullptr;
         });
 
     if (SafeCall([&] {
-        addon->updateCheck(&api);
+        addon.updateCheck(&updateApi);
         }, [&] {
-            spdlog::error("Error in addon {} UpdateCheck, unloading...", addon->file.string());
-            FreeLibrary(addon->handle);
-            addon->handle = nullptr;
+            spdlog::error("Error in addon {} UpdateCheck, unloading...", addon.file.string());
+            FreeLibrary(addon.handle);
+            addon.handle = nullptr;
             return false;
             }))
     {
-        if (!addon->updateData.empty())
+        if (!addon.updateData.empty())
         {
-            FreeLibrary(addon->handle);
-            addon->handle = nullptr;
+            FreeLibrary(addon.handle);
+            addon.handle = nullptr;
 
-            if (!std::filesystem::remove(addon->file))
+            if (!std::filesystem::remove(addon.file))
             {
-                spdlog::error("Addon {} could not be removed for updating, aborting...", addon->file.string());
+                spdlog::error("Addon {} could not be removed for updating, aborting...", addon.file.string());
                 return;
             }
 
-            if (addon->updateDataIsFileName)
+            if (addon.updateDataIsFileName)
             {
-                std::string_view updatedFileName{ reinterpret_cast<const char*>(addon->updateData.data()), addon->updateData.size() };
-                auto updatedFile = addon->file.parent_path() / updatedFileName;
+                std::string_view updatedFileName{ reinterpret_cast<const char*>(addon.updateData.data()), addon.updateData.size() };
+                auto updatedFile = addon.file.parent_path() / updatedFileName;
                 if (!std::filesystem::exists(updatedFile))
                 {
-                    spdlog::error("Addon {} UpdateCheck provided update file {} which does not exist, aborting...", addon->file.string(), updatedFile.string());
+                    spdlog::error("Addon {} UpdateCheck provided update file {} which does not exist, aborting...", addon.file.string(), updatedFile.string());
                     return;
                 }
-                std::filesystem::rename(updatedFile, addon->file);
+                std::filesystem::rename(updatedFile, addon.file);
             }
             else
             {
-                FILE* file = nullptr;
-                if (fopen_s(&file, addon->file.string().c_str(), "wb") == EINVAL || file == nullptr)
+                std::ofstream stream(addon.file, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+                if (stream.is_open())
                 {
-                    spdlog::error("Addon file {} could not be opened for writing, aborting...", addon->file.string());
+	                spdlog::error("Addon file {} could not be opened for writing, aborting...", addon.file.string());
                     return;
                 }
-                fwrite(addon->updateData.data(), sizeof(unsigned char), addon->updateData.size(), file);
-                fclose(file);
+                stream.write(reinterpret_cast<const char*>(addon.updateData.data()), addon.updateData.size());
+                stream.close();
             }
 
             InspectionHandle handle;
             if (!handle.symInitialized)
                 return;
 
-            auto newAddon = InspectAddon(addon->file, handle);
+            auto newAddon = InspectAddon(addon.file, handle);
             if (newAddon)
-                *addon = *newAddon; // FIXME: Does this correctly update g_DelayedAddons and g_Addons?
+                addon = std::move(*newAddon); // FIXME: Does this correctly update g_DelayedAddons and g_Addons?
             else
             {
-                spdlog::error("Addon {} could not be reloaded after update, aborting...", addon->file.string());
+                spdlog::error("Addon {} could not be reloaded after update, aborting...", addon.file.string());
                 return;
             }
         }
 
-        InitializeAddon(*addon, true);
+        InitializeAddon(addon, true);
     }
 }
 
@@ -790,14 +799,14 @@ void InitializeAddons(bool launcher)
         InitializeAddon(addon, launcher);
     g_AddonsInitialized = true;
 
-    if (launcher && !g_DelayedAddons.empty())
+    if (launcher)
     {
-        spdlog::debug("Starting self-update check...");
+        spdlog::debug("Starting update checks...");
 
-        g_DelayedAddonsManagerFuture = std::async(std::launch::async, [] {
-            for (auto* addon : g_DelayedAddons)
-                UpdateAddon(addon);
-            });
+        for (auto& addon: g_Addons | std::views::filter([](const auto& val)-> bool {return val.updateCheck;}))
+        {
+            addon.updateFuture = std::async(std::launch::async, [&addon] {UpdateAddon(addon);});
+        }
     }
 }
 
@@ -849,39 +858,40 @@ void Quit(HWND hwnd)
     g_Quit = true;
     ShutdownAddons();
     ShutdownD3DObjects(hwnd);
+
+    spdlog::shutdown();
 }
 
 void LauncherClosing(HWND hwnd)
 {
     using namespace std::chrono_literals;
-    if (g_DelayedAddonsManagerFuture.valid() && g_DelayedAddonsManagerFuture.wait_for(5s) != std::future_status::ready)
+
+    // TODO: use C++26' std::when_all instead
+    auto deadline = std::chrono::steady_clock::now() + 5s;
+    std::vector<std::string> failedUpdates;
+    for (auto& addon : g_Addons)
     {
-        std::scoped_lock lock(g_DelayedAddonsTimesMutex);
-
-        AddonData* faultyAddon = nullptr;
-        size_t start = g_DelayedAddonsTimes.size() / 2;
-        if (g_DelayedAddonsTimes.size() % 2 == 1)
+        if (addon.updateFuture.valid() && addon.updateFuture.wait_until(deadline) != std::future_status::ready)
         {
-            faultyAddon = g_DelayedAddons[start++];
-            spdlog::info("Could not update addon {}, timed out while waiting for update.", faultyAddon->file.string());
+	        spdlog::info("Could not update addon {}, timed out while waiting for update.", addon.file.string());
+            failedUpdates.emplace_back(addon.file.string());
         }
-        for (size_t i = start; i < g_DelayedAddons.size(); ++i)
-        {
-            const auto& addon = *g_DelayedAddons[i];
-            spdlog::info("Could not update addon {}, timed out before starting.", addon.file.string());
-        }
+    }
 
-        spdlog::critical("Could not update all addons within 5 seconds of the launcher closing, terminating game!");
+    if (!failedUpdates.empty())
+    {
+	    spdlog::critical("Could not update all addons within 5 seconds of the launcher closing, terminating game!");
 
-        const auto msg = [&] {
-            if (faultyAddon)
-                return std::format("The addon {} took too long to update and may have crashed. For safety reasons, the game will now close.", faultyAddon->file.string());
-            else
-                return std::string("One or more addons took too long to update. For safety reasons, the game will now close.");
-            }();
-        MessageBoxA(g_AssociatedWindow, msg.c_str(), "Addon Update Failed", MB_OK | MB_ICONEXCLAMATION);
+        std::stringstream out;
+        out << "One or more addons took too long to update. For safety reasons, the game will now close.";
+        out << "\nFailing Addons:";
+        for (auto& str : failedUpdates) 
+			out << "\n- " << str << "";
+        auto outstr = out.str();
 
-        spdlog::default_logger()->flush();
+        MessageBoxA(g_AssociatedWindow, outstr.c_str(), "Addon Update Failed", MB_OK | MB_ICONEXCLAMATION);
+
+        spdlog::shutdown();
         std::terminate();
     }
 }

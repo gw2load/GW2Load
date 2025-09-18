@@ -59,6 +59,7 @@
 *   void GW2Load_UpdateCheck(GW2Load_UpdateAPI* api);
 *       If the export is defined, UpdateCheck will be called *before* GetAddonAPIVersion to allow the addon the opportunity to self-update.
 *       The provided callback may be called by the addon to signal to the loader that an update is pending.
+*       The callback is only valid during the UpdateCheck call.
 *       The buffer provided by the addon will be copied by the loader so the addon can free the buffer immediately after the callback returns.
 *       Two interpretations of the data buffer are available:
 *         - If dataIsFileName is true, then data is cast as a C-string and interpreted as a path relative to the current DLL's location.
