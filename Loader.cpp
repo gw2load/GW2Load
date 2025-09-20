@@ -85,12 +85,17 @@ struct AddonData
     std::string addonVersionString;
 
     std::chrono::system_clock::time_point updateStartTime;
-    std::future<void> updateFuture;
     std::vector<unsigned char> updateData;
     bool updateDataIsFileName = false;
 };
 
 std::vector<AddonData> g_Addons;
+struct UpdateData
+{
+    std::filesystem::path file;
+    std::future<void> future;
+};
+std::vector<UpdateData> g_AddonUpdates;
 bool g_AddonsInitialized = false;
 
 BOOL CALLBACK EnumSymProc(
@@ -186,7 +191,8 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
             return std::make_pair(fileInfo->dwFileVersionMS, fileInfo->dwFileVersionLS);
         }();
 
-    AddonData data{ path };
+    AddonData data;
+    data.file = path;
 
     data.majorAddonVersion = HIWORD(hiVer);
     data.minorAddonVersion = LOWORD(hiVer);
@@ -408,10 +414,12 @@ AddonData* GetAddonFromAddress(void* address = _ReturnAddress())
     auto&& addonIt = std::ranges::find(g_Addons, mod, &AddonData::handle);
     if (addonIt != g_Addons.end())
     {
+        FreeLibrary(mod);
         return &*addonIt;
     }
 
     spdlog::warn("GetModuleNameFromAddress: could not find module handle '{}' in addons.", fmt::ptr(mod));
+    FreeLibrary(mod);
     return nullptr;
 }
 
@@ -546,8 +554,12 @@ bool SafeCall(F&& func, auto&& err)
 void UpdateNotificationCallback(void* data, unsigned int sizeInBytes, bool dataIsFileName)
 {
     auto* addon = GetAddonFromAddress();
-    if (!addon || sizeInBytes == 0)
+    if (!addon || sizeInBytes == 0) {
+        spdlog::trace("UpdateNotificationCallback called - {} .. {}", fmt::ptr(addon), sizeInBytes);
         return;
+    }
+
+    spdlog::trace("UpdateNotificationCallback called for addon {} - Size: {} - IsFileName: {}", addon->name, sizeInBytes, dataIsFileName);
 
     auto* src = static_cast<const unsigned char*>(data);
     addon->updateData.assign(src, src + sizeInBytes);
@@ -590,6 +602,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                 spdlog::error("Addon {} could not be loaded: {}", addon.name, GetLastErrorMessage());
                 return false;
             }
+
             spdlog::debug("Loaded addon {} module '{}'.", addon.name, addon.file.string());
 
             addon.getAddonAPIVersion = reinterpret_cast<GW2Load_GetAddonAPIVersion_t>(GetProcAddress(addon.handle, "GW2Load_GetAddonAPIVersion"));
@@ -621,6 +634,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             // Only do the update check on the initial addon load pass, not on subsequent calls to InitializeAddon from the self-update process
             if (addon.updateCheck && !g_AddonsInitialized)
             {
+                spdlog::debug("Addon {} has update check, delay init.", addon.name);
                 return false;
             }
         }
@@ -744,12 +758,30 @@ void UpdateAddon(AddonData& addon)
             FreeLibrary(addon.handle);
             addon.handle = nullptr;
 
-            if (!std::filesystem::remove(addon.file))
+            // return true on delete and false on rename
+            auto rename_remove = [](const std::filesystem::path& file)
             {
-                spdlog::error("Addon {} could not be removed for updating, aborting...", addon.file.string());
-                return;
-            }
+                bool res;
+                try {
+                res = std::filesystem::remove(file);
+                }catch (std::exception& e)
+                {
+                    spdlog::error("std::filesystem::remove threw: {}", e.what());
+                    throw;
+                }
+                if (!res)
+                {
+                    spdlog::error("Addon {} could not be removed for updating, renaming...", file.string());
 
+                    // rename old file into something else, removing can potentially fail
+                    auto oldFile = file;
+                    oldFile += ".old";
+                    std::filesystem::rename(file, oldFile);
+                }
+                return res;
+            };
+
+            bool removed;
             if (addon.updateDataIsFileName)
             {
                 std::string_view updatedFileName{ reinterpret_cast<const char*>(addon.updateData.data()), addon.updateData.size() };
@@ -757,29 +789,42 @@ void UpdateAddon(AddonData& addon)
                 if (!std::filesystem::exists(updatedFile))
                 {
                     spdlog::error("Addon {} UpdateCheck provided update file {} which does not exist, aborting...", addon.file.string(), updatedFile.string());
+                    InitializeAddon(addon, true);
                     return;
                 }
+                removed = rename_remove(addon.file);
                 std::filesystem::rename(updatedFile, addon.file);
             }
             else
             {
-                std::ofstream stream(addon.file, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
-                if (stream.is_open())
+                removed = rename_remove(addon.file);
+                std::ofstream stream(addon.file, std::ios_base::binary | std::ios_base::out);
+                if (!stream.is_open())
                 {
-	                spdlog::error("Addon file {} could not be opened for writing, aborting...", addon.file.string());
+                    spdlog::error("Addon file {} could not be opened for writing, aborting...", addon.file.string());
                     return;
                 }
                 stream.write(reinterpret_cast<const char*>(addon.updateData.data()), addon.updateData.size());
                 stream.close();
             }
+            if (!removed)
+            {
+                spdlog::warn("Addon {} renamed, load old file ...", addon.file.string());
+                addon.file += ".out";
+                InitializeAddon(addon, true);
+                return;
+            }
 
             InspectionHandle handle;
             if (!handle.symInitialized)
+            {
+                spdlog::warn("Addon {} could not be loaded: !InspectionHandle::symInitialized", addon.name);
                 return;
+            }
 
             auto newAddon = InspectAddon(addon.file, handle);
             if (newAddon)
-                addon = std::move(*newAddon); // FIXME: Does this correctly update g_DelayedAddons and g_Addons?
+                addon = std::move(*newAddon);
             else
             {
                 spdlog::error("Addon {} could not be reloaded after update, aborting...", addon.file.string());
@@ -805,7 +850,7 @@ void InitializeAddons(bool launcher)
 
         for (auto& addon: g_Addons | std::views::filter([](const auto& val)-> bool {return val.updateCheck;}))
         {
-            addon.updateFuture = std::async(std::launch::async, [&addon] {UpdateAddon(addon);});
+            g_AddonUpdates.emplace_back(addon.file, std::async(std::launch::async, [&addon] {UpdateAddon(addon);}));
         }
     }
 }
@@ -869,24 +914,24 @@ void LauncherClosing(HWND hwnd)
     // TODO: use C++26' std::when_all instead
     auto deadline = std::chrono::steady_clock::now() + 5s;
     std::vector<std::string> failedUpdates;
-    for (auto& addon : g_Addons)
+    for (auto& update : g_AddonUpdates) 
     {
-        if (addon.updateFuture.valid() && addon.updateFuture.wait_until(deadline) != std::future_status::ready)
+        if (update.future.valid() && update.future.wait_until(deadline) != std::future_status::ready)
         {
-	        spdlog::info("Could not update addon {}, timed out while waiting for update.", addon.file.string());
-            failedUpdates.emplace_back(addon.file.string());
+            spdlog::info("Could not update addon {}, timed out while waiting for update.", update.file.string());
+            failedUpdates.emplace_back(update.file.string());
         }
     }
 
     if (!failedUpdates.empty())
     {
-	    spdlog::critical("Could not update all addons within 5 seconds of the launcher closing, terminating game!");
+        spdlog::critical("Could not update all addons within 5 seconds of the launcher closing, terminating game!");
 
         std::stringstream out;
         out << "One or more addons took too long to update. For safety reasons, the game will now close.";
         out << "\nFailing Addons:";
         for (auto& str : failedUpdates) 
-			out << "\n- " << str << "";
+            out << "\n- " << str << "";
         auto outstr = out.str();
 
         MessageBoxA(g_AssociatedWindow, outstr.c_str(), "Addon Update Failed", MB_OK | MB_ICONEXCLAMATION);
