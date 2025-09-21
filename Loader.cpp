@@ -500,9 +500,17 @@ extern "C" __declspec(dllexport) void GW2Load_DeregisterCallback(GW2Load_HookedF
 
 extern "C" __declspec(dllexport) void GW2Load_Log(GW2Load_LogLevel level, const char* message, size_t messageSize)
 {
+	auto lvl = static_cast<spdlog::level::level_enum>(level);
     const auto name = GetAddonNameFromAddress();
+
+    // check log level validity
+    if (lvl < spdlog::level::trace || lvl >= spdlog::level::n_levels)
+    {
+	    spdlog::warn("{} tried to log invalid log level {}", name, std::to_underlying(lvl));
+        return;
+    }
+
     std::string_view mess(message, messageSize);
-    auto lvl = static_cast<spdlog::level::level_enum>(level);
     g_AddonLogger->log(lvl, "[{}] [{}] {}", name, lvl, mess);
 }
 
