@@ -423,7 +423,7 @@ AddonData* GetAddonFromAddress(void* address = _ReturnAddress())
     return nullptr;
 }
 
-const std::string_view GetAddonNameFromAddress(void* address = _ReturnAddress())
+std::string_view GetAddonNameFromAddress(void* address = _ReturnAddress())
 {
     auto* data = GetAddonFromAddress(address);
     if (data)
@@ -434,7 +434,7 @@ const std::string_view GetAddonNameFromAddress(void* address = _ReturnAddress())
     return "unknown";
 }
 
-void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
+extern "C" __declspec(dllexport) void GW2Load_RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
     const auto name = GetAddonNameFromAddress();
 
@@ -460,12 +460,13 @@ void RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_Callbac
     const auto idx = GetIndex(func, callbackPoint);
     auto& callbacks = g_Callbacks[idx];
     std::lock_guard guard(callbacks.lock);
+
     // add elements sorted into the vector
     auto it = std::ranges::upper_bound(callbacks.callbacks, priority, std::greater{}, &PriorityCallback::priority);
     callbacks.callbacks.emplace(it, priority, callback);
 }
 
-void DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
+extern "C" __declspec(dllexport) void GW2Load_DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback)
 {
     const auto name = GetAddonNameFromAddress();
 
@@ -491,15 +492,18 @@ void DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callb
     const auto idx = GetIndex(func, callbackPoint);
     auto& callbacks = g_Callbacks[idx];
     std::lock_guard guard(callbacks.lock);
+
     // remove element from the vector
     const auto& [first, last] = std::ranges::remove(callbacks.callbacks, callback, &PriorityCallback::callback);
     callbacks.callbacks.erase(first, last);
 }
 
-void LogCallback(GW2Load_LogLevel level, const char* message)
+extern "C" __declspec(dllexport) void GW2Load_Log(GW2Load_LogLevel level, const char* message, size_t messageSize)
 {
     const auto name = GetAddonNameFromAddress();
-    spdlog::log(static_cast<spdlog::level::level_enum>(level), "{}|{}", name, message);
+    std::string_view mess(message, messageSize);
+    auto lvl = static_cast<spdlog::level::level_enum>(level);
+    g_AddonLogger->log(lvl, "[{}] [{}] {}", name, lvl, mess);
 }
 
 template<typename F, typename... Args>
@@ -564,19 +568,6 @@ void UpdateNotificationCallback(void* data, unsigned int sizeInBytes, bool dataI
     auto* src = static_cast<const unsigned char*>(data);
     addon->updateData.assign(src, src + sizeInBytes);
     addon->updateDataIsFileName = dataIsFileName;
-}
-
-struct GW2Load_API_Internal : public GW2Load_API
-{
-    GW2Load_API_Internal(GW2Load_RegisterCallback register_callback, GW2Load_DeregisterCallback deregister_callback)
-    {
-        registerCallback = register_callback;
-        deregisterCallback = deregister_callback;
-    }
-};
-
-namespace {
-    GW2Load_API_Internal api{ RegisterCallback, DeregisterCallback };
 }
 
 bool InitializeAddon(AddonData& addon, bool launcher)
@@ -700,7 +691,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
 
         if (!SafeCall(
             [&] {
-                return addon.onLoadLauncher(&api);
+                return addon.onLoadLauncher();
             },
             onError("Error in addon {} OnLoadLauncher, unloading...", addon.name)))
         {
@@ -716,7 +707,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
 
         if (!SafeCall(
             [&] {
-                return addon.onLoad(&api, g_SwapChain, g_Device, g_DeviceContext);
+                return addon.onLoad(g_SwapChain, g_Device, g_DeviceContext);
             },
             onError("Error in addon {} OnLoad, unloading...", addon.name)))
         {

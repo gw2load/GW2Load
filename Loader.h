@@ -13,3 +13,5 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd);
 void InitializeAddons(bool launcher);
 void Quit(HWND hwnd);
 void LauncherClosing(HWND hwnd);
+
+extern std::shared_ptr<spdlog::logger> g_AddonLogger;

@@ -79,6 +79,7 @@ FUNC_EXPORT(TransparentBlt, BOOL, (HDC hdcDest, int xoriginDest, int yoriginDest
     g_##Name_ = reinterpret_cast<Name_##_t>(GetProcAddress(g_MSIMG32Handle, #Name_))
 
 std::shared_ptr<spdlog::logger> g_Logger;
+std::shared_ptr<spdlog::logger> g_AddonLogger;
 
 bool ValidateExecutable()
 {
@@ -145,6 +146,9 @@ void Init()
     fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
     g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
     spdlog::set_default_logger(g_Logger);
+    g_AddonLogger = std::make_shared<spdlog::logger>("addon_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
+    g_AddonLogger->set_pattern("%Y-%m-%d %T.%f %v");
+    spdlog::register_logger(g_AddonLogger);
 
 #ifdef _DEBUG
     spdlog::flush_every(std::chrono::seconds(1));
