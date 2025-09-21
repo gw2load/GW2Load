@@ -146,8 +146,10 @@ void Init()
     fileLogger->set_pattern("%Y-%m-%d %T.%f [%l] %v");
     g_Logger = std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
     spdlog::set_default_logger(g_Logger);
-    g_AddonLogger = std::make_shared<spdlog::logger>("addon_sink", spdlog::sinks_init_list{ outputLogger, fileLogger });
-    g_AddonLogger->set_pattern("%Y-%m-%d %T.%f %v");
+
+    auto addonFileLogger = std::make_shared<spdlog::sinks::rotating_file_sink_mt>("addons/_logs/GW2Load/GW2Load.log", max_log_size, 10, true);
+    addonFileLogger->set_pattern("%Y-%m-%d %T.%f %v");
+    g_AddonLogger = std::make_shared<spdlog::logger>("addon_sink", spdlog::sinks_init_list{ outputLogger, addonFileLogger });
     spdlog::register_logger(g_AddonLogger);
 
 #ifdef _DEBUG
