@@ -67,7 +67,7 @@
 *         - If dataIsFileName is false, then data is assumed to contain the new DLL's binary data in full.
 *           The addon will be unloaded and overwritten by the new data, then reloaded.
 *       These calls are asynchronous: if UpdateCheck exists, a thread will be spawned to perform the update check for each addon in parallel.
-*       All UpdateCheck threads will be killed at most two seconds after the launcher is closed and the affected addons will be unloaded.
+*       All UpdateCheck threads will be killed at most five seconds after the launcher is closed and the affected addons will be unloaded.
 *
 * Once API capabilities have been determined, the DLL will be unloaded.
 * After all DLLs have been processed, they will be reloaded properly (via LoadLibrary) at the earliest opportunity.

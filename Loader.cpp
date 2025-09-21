@@ -412,14 +412,14 @@ AddonData* GetAddonFromAddress(void* address = _ReturnAddress())
     }
 
     auto&& addonIt = std::ranges::find(g_Addons, mod, &AddonData::handle);
-    if (addonIt != g_Addons.end())
+    FreeLibrary(mod);
+
+	if (addonIt != g_Addons.end())
     {
-        FreeLibrary(mod);
         return &*addonIt;
     }
 
     spdlog::warn("GetModuleNameFromAddress: could not find module handle '{}' in addons.", fmt::ptr(mod));
-    FreeLibrary(mod);
     return nullptr;
 }
 
@@ -760,17 +760,12 @@ void UpdateAddon(AddonData& addon)
             // return true on delete and false on rename
             auto rename_remove = [](const std::filesystem::path& file)
             {
-                bool res;
-                try {
-                res = std::filesystem::remove(file);
-                }catch (std::exception& e)
-                {
-                    spdlog::error("std::filesystem::remove threw: {}", e.what());
-                    throw;
-                }
+                std::error_code err;
+                // returns false on error if error_code overload is used
+                bool res = std::filesystem::remove(file, err);
                 if (!res)
                 {
-                    spdlog::error("Addon {} could not be removed for updating, renaming...", file.string());
+                    spdlog::warn("Addon {} could not be removed for updating, renaming...", file.string());
 
                     // rename old file into something else, removing can potentially fail
                     auto oldFile = file;
