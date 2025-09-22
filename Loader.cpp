@@ -414,7 +414,7 @@ AddonData* GetAddonFromAddress(void* address = _ReturnAddress())
     auto&& addonIt = std::ranges::find(g_Addons, mod, &AddonData::handle);
     FreeLibrary(mod);
 
-	if (addonIt != g_Addons.end())
+    if (addonIt != g_Addons.end())
     {
         return &*addonIt;
     }
@@ -500,13 +500,13 @@ extern "C" __declspec(dllexport) void GW2Load_DeregisterCallback(GW2Load_HookedF
 
 extern "C" __declspec(dllexport) void GW2Load_Log(GW2Load_LogLevel level, const char* message, size_t messageSize)
 {
-	auto lvl = static_cast<spdlog::level::level_enum>(level);
+    auto lvl = static_cast<spdlog::level::level_enum>(level);
     const auto name = GetAddonNameFromAddress();
 
     // check log level validity
     if (lvl < spdlog::level::trace || lvl >= spdlog::level::n_levels)
     {
-	    spdlog::warn("{} tried to log invalid log level {}", name, std::to_underlying(lvl));
+        spdlog::warn("{} tried to log invalid log level {}", name, std::to_underlying(lvl));
         return;
     }
 
@@ -730,8 +730,6 @@ bool InitializeAddon(AddonData& addon, bool launcher)
 
 void UpdateAddon(AddonData& addon)
 {
-    GW2Load_UpdateAPI updateApi{ UpdateNotificationCallback };
-
     addon.updateStartTime = std::chrono::system_clock::now();
 
     spdlog::info("Checking for updates for addon {}...", addon.file.string());
@@ -744,7 +742,7 @@ void UpdateAddon(AddonData& addon)
         });
 
     if (SafeCall([&] {
-        addon.updateCheck(&updateApi);
+        addon.updateCheck(&UpdateNotificationCallback);
         }, [&] {
             spdlog::error("Error in addon {} UpdateCheck, unloading...", addon.file.string());
             FreeLibrary(addon.handle);
