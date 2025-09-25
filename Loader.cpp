@@ -699,7 +699,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
 
         if (!SafeCall(
             [&] {
-                return addon.onLoadLauncher();
+                return addon.onLoadLauncher(g_LoaderModuleHandle);
             },
             onError("Error in addon {} OnLoadLauncher, unloading...", addon.name)))
         {
@@ -715,7 +715,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
 
         if (!SafeCall(
             [&] {
-                return addon.onLoad(g_SwapChain, g_Device, g_DeviceContext);
+                return addon.onLoad(g_LoaderModuleHandle, g_SwapChain, g_Device, g_DeviceContext);
             },
             onError("Error in addon {} OnLoad, unloading...", addon.name)))
         {
@@ -742,7 +742,7 @@ void UpdateAddon(AddonData& addon)
         });
 
     if (SafeCall([&] {
-        addon.updateCheck(&UpdateNotificationCallback);
+        addon.updateCheck(g_LoaderModuleHandle, &UpdateNotificationCallback);
         }, [&] {
             spdlog::error("Error in addon {} UpdateCheck, unloading...", addon.file.string());
             FreeLibrary(addon.handle);

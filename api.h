@@ -1,5 +1,10 @@
 #pragma once
 
+#ifdef __cplusplus
+#include <string_view>
+#endif
+#include <windows.h>
+
 /*
 * This library is free software; you can redistribute it and/or
 * modify it under the terms of the GNU Lesser General Public
@@ -29,7 +34,7 @@
 * Inside the subfolders, all DLLs will be checked for GW2Load exports. This is done *without* executing any code in the DLL.
 *
 * 2. Requirements
-* 
+*
 * The primary requirement to be recognized as an addon is a valid VERSIONINFO block with, at minimum:
 *   - A valid ProductName (1st chance) or FileDescription (2nd chance) string field, which will be interpreted as the addon's name
 *   - A valid PRODUCTVERSION (1st chance) or FILEVERSION (2nd chance) numerical field, which will be interpreted as the addon's version
@@ -42,8 +47,8 @@
 *       Do NOT do any initialization in GW2Load_GetAddonAPIVersion!
 *
 * Additional exports will be detected at this time as well:
-*   bool GW2Load_OnLoad(IDXGISwapChain* swapChain, ID3D11Device* device, ID3D11DeviceContext* context);
-*   bool GW2Load_OnLoadLauncher();
+*   bool GW2Load_OnLoad(HMODULE gw2loadHandle, IDXGISwapChain* swapChain, ID3D11Device* device, ID3D11DeviceContext* context);
+*   bool GW2Load_OnLoadLauncher(HMODULE gw2loadHandle);
 *       The return value for either of these will be checked and the addon will be unloaded if it is false.
 *   void GW2Load_OnClose();
 *
@@ -56,7 +61,7 @@
 *       loader version. The addon can also return zero to abort the backwards compatibility attempt and get unloaded safely.
 *
 *   using GW2Load_UpdateCallback = void(*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
-*   void GW2Load_UpdateCheck(GW2Load_UpdateCallback updateCallback);
+*   void GW2Load_UpdateCheck(HMODULE gw2loadHandle, GW2Load_UpdateCallback updateCallback);
 *       If the export is defined, UpdateCheck will be called *before* GetAddonAPIVersion to allow the addon the opportunity to self-update.
 *       The provided callback may be called by the addon to signal to the loader that an update is pending.
 *       The callback is only valid during the UpdateCheck call.
@@ -87,17 +92,11 @@ inline static constexpr GW2Load_Version_t GW2Load_CurrentAddonAPIVersion = GW2Lo
 using GW2Load_UpdateCallback = void(__cdecl*)(void* data, unsigned int sizeInBytes, bool dataIsFileName);
 
 using GW2Load_GetAddonAPIVersion_t = GW2Load_Version_t(__cdecl*)();
-using GW2Load_OnLoad_t = bool(__cdecl*)(struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
-using GW2Load_OnLoadLauncher_t = bool(__cdecl*)();
+using GW2Load_OnLoad_t = bool(__cdecl*)(HMODULE gw2loadHandle, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
+using GW2Load_OnLoadLauncher_t = bool(__cdecl*)(HMODULE gw2loadHandle);
 using GW2Load_OnClose_t = void(__cdecl*)();
 using GW2Load_OnAddonDescriptionVersionOutdated_t = GW2Load_Version_t(__cdecl*)(GW2Load_Version_t loaderVersion);
-using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateCallback updateCallback);
-
-#ifdef GW2LOAD
-#define GW2LOAD_EXPORT __declspec(dllexport)
-#else
-#define GW2LOAD_EXPORT __declspec(dllimport)
-#endif
+using GW2Load_UpdateCheck_t = void(__cdecl*)(HMODULE gw2loadHandle, GW2Load_UpdateCallback updateCallback);
 
 /*
  * 3. Addon API
@@ -108,7 +107,7 @@ using GW2Load_UpdateCheck_t = void(__cdecl*)(GW2Load_UpdateCallback updateCallba
  * Callbacks:
  *   Can be attached to specific points in the rendering pipeline.
  *   This is achieved by registering against a function in `GW2Load_HookedFunction` and specifying the `GW2Load_CallbackPoint`
- * 
+ *
  *   Registration API:
  *     void GW2Load_RegisterCallback(GW2Load_HookedFunction func, int priority,
  *                                   GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
@@ -157,36 +156,65 @@ using GW2Load_ResizeBuffersCallback = void(__cdecl*)(IDXGISwapChain* swapChain, 
 
 using GW2Load_RegisterCallbackFunc = void(__cdecl*)(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
 using GW2Load_DeregisterCallbackFunc = void(__cdecl*)(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
+using GW2Load_LogFunc = void (__cdecl*)(GW2Load_LogLevel level, const char* message, size_t messageSize);
 
-extern "C"
+struct GW2Load_API
 {
-    GW2LOAD_EXPORT void GW2Load_RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
-    GW2LOAD_EXPORT void GW2Load_DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, GW2Load_GenericCallback callback);
-    GW2LOAD_EXPORT void GW2Load_Log(GW2Load_LogLevel level, const char* message, size_t messageSize);
-}
-
 #ifdef __cplusplus
-    template<typename F>
-    auto GW2Load_RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, F callback)
-    {
-        GW2Load_GenericCallback cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
-        GW2Load_RegisterCallback(func, priority, callbackPoint, cb);
+    explicit GW2Load_API(HMODULE gw2loadHandle) {
+        registerCallback = reinterpret_cast<GW2Load_RegisterCallbackFunc>(GetProcAddress(gw2loadHandle, "GW2Load_RegisterCallback"));
+        deregisterCallback = reinterpret_cast<GW2Load_DeregisterCallbackFunc>(GetProcAddress(gw2loadHandle, "GW2Load_DeregisterCallback"));
+        log = reinterpret_cast<GW2Load_LogFunc>(GetProcAddress(gw2loadHandle, "GW2Load_Log"));
     }
 
     template<typename F>
-    auto GW2Load_DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, F callback)
+    auto RegisterCallback(GW2Load_HookedFunction func, int priority, GW2Load_CallbackPoint callbackPoint, F callback)
     {
-        GW2Load_GenericCallback cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
-        GW2Load_DeregisterCallback(func, callbackPoint, cb);
+        auto cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
+        registerCallback(func, priority, callbackPoint, cb);
+    }
+
+    template<typename F>
+    auto DeregisterCallback(GW2Load_HookedFunction func, GW2Load_CallbackPoint callbackPoint, F callback)
+    {
+        auto cb = reinterpret_cast<GW2Load_GenericCallback>(+callback);
+        deregisterCallback(func, callbackPoint, cb);
+    }
+
+    auto Log(GW2Load_LogLevel level, const char* message, size_t messageSize)
+    {
+        log(level, message, messageSize);
+    }
+    auto Log(GW2Load_LogLevel level, std::string_view message)
+    {
+        log(level, message.data(), message.size());
+    }
+protected:
+#endif
+    GW2Load_RegisterCallbackFunc registerCallback;
+    GW2Load_DeregisterCallbackFunc deregisterCallback;
+    GW2Load_LogFunc log;
+};
+#ifndef __cplusplus
+    GW2Load_API GW2Load_API_Init(void* gw2loadHandle) {
+        auto handle = static_cast<HMODULE>(gw2loadHandle);
+        GW2Load_RegisterCallbackFunc registerCallback = (GW2Load_RegisterCallbackFunc)GetProcAddress(handle, "GW2Load_RegisterCallback");
+        GW2Load_DeregisterCallbackFunc deregisterCallback = (GW2Load_DeregisterCallbackFunc)GetProcAddress(handle, "GW2Load_DeregisterCallback");
+        GW2Load_LogFunc log = (GW2Load_LogFunc)GetProcAddress(handle, "GW2Load_Log");
+        return GW2Load_API {
+            registerCallback,
+            deregisterCallback,
+            log,
+        }
     }
 #endif
 
 /*
 * 4. Standalone API
-* 
+*
 * GW2Load also offers a simple standalone C API to enumerate compatible addons in a directory and return basic information about them.
 * This API can be accessed as if the loader were a standard library.
-* 
+*
 */
 
 struct GW2Load_EnumeratedAddon
@@ -195,6 +223,12 @@ struct GW2Load_EnumeratedAddon
     const char* name;
     const bool isEnabled;
 };
+
+#ifdef GW2LOAD
+#define GW2LOAD_EXPORT __declspec(dllexport)
+#else
+#define GW2LOAD_EXPORT __declspec(dllimport)
+#endif
 
 extern "C"
 {
