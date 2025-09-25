@@ -1,0 +1,16 @@
+include("${CMAKE_CURRENT_LIST_DIR}/vs-version.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/git-version.cmake")
+
+get_git_version()
+
+generate_version_file(
+        VERSION_MAJOR ${VERSION_MAJOR}
+        VERSION_MINOR ${VERSION_MINOR}
+        VERSION_PATCH ${VERSION_PATCH}
+        VERSION_REF ${VERSION_REF}
+        VERSION_REF_STR ${VERSION_REF_STR}
+        INTERNAL_NAME ${INTERNAL_NAME}
+        ORIGINAL_FILENAME ${ORIGINAL_FILENAME}
+        PRODUCT_NAME ${PRODUCT_NAME}
+        DESCRIPTION ${DESCRIPTION}
+)

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <future>
 #include <regex>
+#include <Windows.h>
 
 bool g_Quit = false;
 std::unordered_map<CallbackIndex, CallbackElement> g_Callbacks;
@@ -439,7 +440,7 @@ extern "C" __declspec(dllexport) void GW2Load_RegisterCallback(GW2Load_HookedFun
     const auto name = GetAddonNameFromAddress();
 
     spdlog::debug("Registering callback for {}: func={}, priority={}, callbackPoint={}, callback={}",
-        name, func, priority, callbackPoint, fptr(callback));
+        name, func, priority, callbackPoint, fmt::ptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
     {
@@ -471,7 +472,7 @@ extern "C" __declspec(dllexport) void GW2Load_DeregisterCallback(GW2Load_HookedF
     const auto name = GetAddonNameFromAddress();
 
     spdlog::debug("Deregistering callback for {}: func={}, callbackPoint={}, callback={}",
-        name, func, callbackPoint, fptr(callback));
+        name, func, callbackPoint, fmt::ptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
     {
