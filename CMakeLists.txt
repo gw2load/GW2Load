@@ -84,3 +84,14 @@ target_sources(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE Version.lib D3D11.lib Dbghelp.lib)
+
+
+# This creates an executable that can be used to test the Enumerate exports
+project(StandaloneTestApp CXX)
+
+add_executable(${PROJECT_NAME} StandaloneTestApp.cpp)
+
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
+target_compile_definitions(${PROJECT_NAME} PRIVATE -D_UNICODE -DUNICODE)
+
+target_link_libraries(${PROJECT_NAME} GW2Load::GW2Load)

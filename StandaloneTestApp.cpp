@@ -7,8 +7,10 @@
 
 int main(int argc, char* argv[])
 {
-    if (argc != 2)
+    if (argc != 2) {
+        std::cout << "Wrong number of arguments" << std::endl;
         return 1;
+    }
 
     std::cout << "Enumerating addons in directory '" << argv[1] << "'" << std::endl;
 
@@ -22,7 +24,7 @@ int main(int argc, char* argv[])
     {
         std::cout << a.name << ": " << a.path << std::endl;
         bool check = GW2Load_CheckIfAddon(a.path);
-        assert(check, true);
+        assert(check);
         if (!check)
             std::cout << "\tError: addon check failed" << std::endl;
     }
