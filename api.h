@@ -95,7 +95,7 @@ using GW2Load_GetAddonAPIVersion_t = GW2Load_Version_t(__cdecl*)();
 using GW2Load_OnLoad_t = bool(__cdecl*)(HMODULE gw2loadHandle, struct IDXGISwapChain* swapChain, struct ID3D11Device* device, struct ID3D11DeviceContext* context);
 using GW2Load_OnLoadLauncher_t = bool(__cdecl*)(HMODULE gw2loadHandle);
 using GW2Load_OnClose_t = void(__cdecl*)();
-using GW2Load_OnAddonDescriptionVersionOutdated_t = GW2Load_Version_t(__cdecl*)(GW2Load_Version_t loaderVersion);
+using GW2Load_OnAddonAPIVersionOutdated_t = GW2Load_Version_t(__cdecl*)(GW2Load_Version_t loaderVersion);
 using GW2Load_UpdateCheck_t = void(__cdecl*)(HMODULE gw2loadHandle, GW2Load_UpdateCallback updateCallback);
 
 /*

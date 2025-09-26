@@ -74,7 +74,7 @@ struct AddonData
     GW2Load_OnLoad_t onLoad = nullptr;
     GW2Load_OnLoadLauncher_t onLoadLauncher = nullptr;
     GW2Load_OnClose_t onClose = nullptr;
-    GW2Load_OnAddonDescriptionVersionOutdated_t onOutdated = nullptr;
+    GW2Load_OnAddonAPIVersionOutdated_t onOutdated = nullptr;
     GW2Load_UpdateCheck_t updateCheck = nullptr;
 
     std::string name;
@@ -603,7 +603,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                 return false;
             }
 
-            spdlog::debug("Loaded addon {} module '{}'.", addon.name, addon.file.string());
+            spdlog::debug("Loaded addon {} module '{}' at address {}.", addon.name, addon.file.string(), fmt::ptr(addon.handle));
 
             addon.getAddonAPIVersion = reinterpret_cast<GW2Load_GetAddonAPIVersion_t>(GetProcAddress(addon.handle, "GW2Load_GetAddonAPIVersion"));
             if (!addon.getAddonAPIVersion)
@@ -616,7 +616,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (addon.hasOnClose)
                 addon.onClose = reinterpret_cast<GW2Load_OnClose_t>(GetProcAddress(addon.handle, "GW2Load_OnClose"));
             if (addon.hasOnOutdated)
-                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonDescriptionVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
+                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonAPIVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
             if (addon.hasUpdateCheck)
                 addon.updateCheck = reinterpret_cast<GW2Load_UpdateCheck_t>(GetProcAddress(addon.handle, "GW2Load_UpdateCheck"));
 
@@ -743,13 +743,12 @@ void UpdateAddon(AddonData& addon)
         });
 
     if (SafeCall([&] {
-        addon.updateCheck(g_LoaderModuleHandle, &UpdateNotificationCallback);
+            addon.updateCheck(g_LoaderModuleHandle, &UpdateNotificationCallback);
         }, [&] {
             spdlog::error("Error in addon {} UpdateCheck, unloading...", addon.file.string());
             FreeLibrary(addon.handle);
             addon.handle = nullptr;
-            return false;
-            }))
+    }))
     {
         if (!addon.updateData.empty())
         {
