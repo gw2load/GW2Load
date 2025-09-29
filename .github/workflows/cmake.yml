@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "cmake-project" ]
+    branches: [ "main" ]
     tags:
       - "*.*.*"
   pull_request:
