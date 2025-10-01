@@ -116,7 +116,7 @@ BOOL CALLBACK EnumSymProc(
         data.hasOnLoadLauncher = true;
     else if (name == "GW2Load_OnClose")
         data.hasOnClose = true;
-    else if (name == "GW2Load_OnAddonDescriptionVersionOutdated")
+    else if (name == "GW2Load_OnAddonAPIVersionOutdated")
         data.hasOnOutdated = true;
     else if (name == "GW2Load_UpdateCheck")
         data.hasUpdateCheck = true;
@@ -616,7 +616,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (addon.hasOnClose)
                 addon.onClose = reinterpret_cast<GW2Load_OnClose_t>(GetProcAddress(addon.handle, "GW2Load_OnClose"));
             if (addon.hasOnOutdated)
-                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonAPIVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
+                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonAPIVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonAPIVersionOutdated"));
             if (addon.hasUpdateCheck)
                 addon.updateCheck = reinterpret_cast<GW2Load_UpdateCheck_t>(GetProcAddress(addon.handle, "GW2Load_UpdateCheck"));
 
@@ -644,7 +644,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (!addon.apiVersion)
                 return onError("Addon {} refused to load, unloading...", addon.name)();
             return true;
-            }, onError("Error in addon {} GetAddonDescription, unloading...", addon.name)))
+            }, onError("Error in addon {} GetAddonAPIVersion, unloading...", addon.name)))
         {
             return false;
         }
@@ -671,7 +671,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                         spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility to API version {}, but consider upgrading your loader.",
                             addon.name, PrintDescVersion(addonVer), PrintDescVersion(GW2Load_CurrentAddonAPIVersion), PrintDescVersion(addon.apiVersion));
                     }
-                    }, onError("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.name)))
+                    }, onError("Error in addon {} OnAddonAPIVersionOutdated, unloading...", addon.name)))
                 {
                     return false;
                 }
