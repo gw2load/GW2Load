@@ -6,6 +6,7 @@
 #include <fstream>
 #include <future>
 #include <regex>
+#include <Windows.h>
 
 bool g_Quit = false;
 std::unordered_map<CallbackIndex, CallbackElement> g_Callbacks;
@@ -73,7 +74,7 @@ struct AddonData
     GW2Load_OnLoad_t onLoad = nullptr;
     GW2Load_OnLoadLauncher_t onLoadLauncher = nullptr;
     GW2Load_OnClose_t onClose = nullptr;
-    GW2Load_OnAddonDescriptionVersionOutdated_t onOutdated = nullptr;
+    GW2Load_OnAddonAPIVersionOutdated_t onOutdated = nullptr;
     GW2Load_UpdateCheck_t updateCheck = nullptr;
 
     std::string name;
@@ -115,7 +116,7 @@ BOOL CALLBACK EnumSymProc(
         data.hasOnLoadLauncher = true;
     else if (name == "GW2Load_OnClose")
         data.hasOnClose = true;
-    else if (name == "GW2Load_OnAddonDescriptionVersionOutdated")
+    else if (name == "GW2Load_OnAddonAPIVersionOutdated")
         data.hasOnOutdated = true;
     else if (name == "GW2Load_UpdateCheck")
         data.hasUpdateCheck = true;
@@ -439,7 +440,7 @@ extern "C" __declspec(dllexport) void GW2Load_RegisterCallback(GW2Load_HookedFun
     const auto name = GetAddonNameFromAddress();
 
     spdlog::debug("Registering callback for {}: func={}, priority={}, callbackPoint={}, callback={}",
-        name, func, priority, callbackPoint, fptr(callback));
+        name, func, priority, callbackPoint, fmt::ptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
     {
@@ -471,7 +472,7 @@ extern "C" __declspec(dllexport) void GW2Load_DeregisterCallback(GW2Load_HookedF
     const auto name = GetAddonNameFromAddress();
 
     spdlog::debug("Deregistering callback for {}: func={}, callbackPoint={}, callback={}",
-        name, func, callbackPoint, fptr(callback));
+        name, func, callbackPoint, fmt::ptr(callback));
 
     if (func == GW2Load_HookedFunction::Undefined || func >= GW2Load_HookedFunction::Count)
     {
@@ -602,7 +603,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                 return false;
             }
 
-            spdlog::debug("Loaded addon {} module '{}'.", addon.name, addon.file.string());
+            spdlog::debug("Loaded addon {} module '{}' at address {}.", addon.name, addon.file.string(), fmt::ptr(addon.handle));
 
             addon.getAddonAPIVersion = reinterpret_cast<GW2Load_GetAddonAPIVersion_t>(GetProcAddress(addon.handle, "GW2Load_GetAddonAPIVersion"));
             if (!addon.getAddonAPIVersion)
@@ -615,7 +616,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (addon.hasOnClose)
                 addon.onClose = reinterpret_cast<GW2Load_OnClose_t>(GetProcAddress(addon.handle, "GW2Load_OnClose"));
             if (addon.hasOnOutdated)
-                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonDescriptionVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonDescriptionVersionOutdated"));
+                addon.onOutdated = reinterpret_cast<GW2Load_OnAddonAPIVersionOutdated_t>(GetProcAddress(addon.handle, "GW2Load_OnAddonAPIVersionOutdated"));
             if (addon.hasUpdateCheck)
                 addon.updateCheck = reinterpret_cast<GW2Load_UpdateCheck_t>(GetProcAddress(addon.handle, "GW2Load_UpdateCheck"));
 
@@ -643,7 +644,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
             if (!addon.apiVersion)
                 return onError("Addon {} refused to load, unloading...", addon.name)();
             return true;
-            }, onError("Error in addon {} GetAddonDescription, unloading...", addon.name)))
+            }, onError("Error in addon {} GetAddonAPIVersion, unloading...", addon.name)))
         {
             return false;
         }
@@ -670,7 +671,7 @@ bool InitializeAddon(AddonData& addon, bool launcher)
                         spdlog::warn("Addon {} uses API version {}, which is newer than current loader API version {}; this is okay, as the addon supports backwards compatibility to API version {}, but consider upgrading your loader.",
                             addon.name, PrintDescVersion(addonVer), PrintDescVersion(GW2Load_CurrentAddonAPIVersion), PrintDescVersion(addon.apiVersion));
                     }
-                    }, onError("Error in addon {} OnAddonDescriptionVersionOutdated, unloading...", addon.name)))
+                    }, onError("Error in addon {} OnAddonAPIVersionOutdated, unloading...", addon.name)))
                 {
                     return false;
                 }
@@ -742,13 +743,12 @@ void UpdateAddon(AddonData& addon)
         });
 
     if (SafeCall([&] {
-        addon.updateCheck(g_LoaderModuleHandle, &UpdateNotificationCallback);
+            addon.updateCheck(g_LoaderModuleHandle, &UpdateNotificationCallback);
         }, [&] {
             spdlog::error("Error in addon {} UpdateCheck, unloading...", addon.file.string());
             FreeLibrary(addon.handle);
             addon.handle = nullptr;
-            return false;
-            }))
+    }))
     {
         if (!addon.updateData.empty())
         {

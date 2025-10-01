@@ -64,7 +64,7 @@ void InitializeD3DObjects(IDXGISwapChain* swc)
 	{
 		const bool firstInit = g_SwapChain == nullptr;
 
-		spdlog::debug("Updating swapchain from {} to {}...", fptr(g_SwapChain), fptr(swc));
+		spdlog::debug("Updating swapchain from {} to {}...", fmt::ptr(g_SwapChain), fmt::ptr(swc));
 		if (g_SwapChain) g_SwapChain->Release();
 		g_SwapChain = swc;
 		g_SwapChain->AddRef();
@@ -75,9 +75,9 @@ void InitializeD3DObjects(IDXGISwapChain* swc)
 
 		if (SUCCEEDED(g_SwapChain->GetDevice(IID_PPV_ARGS(&g_Device))))
 		{
-			spdlog::debug("Updating device to {}...", fptr(g_Device));
+			spdlog::debug("Updating device to {}...", fmt::ptr(g_Device));
 			g_Device->GetImmediateContext(&g_DeviceContext);
-			spdlog::debug("Updating immediate context to {}...", fptr(g_DeviceContext));
+			spdlog::debug("Updating immediate context to {}...", fmt::ptr(g_DeviceContext));
 		}
 		else
 			spdlog::error("Could not get device from swapchain!");

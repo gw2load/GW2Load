@@ -1,0 +1,65 @@
+name: CMake
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "*.*.*"
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ windows-latest ]
+        presets: [ release-windows ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # install cmake and ninja
+      - uses: lukka/get-cmake@latest
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        id: runvcpkg
+        with:
+          # This specifies the location of vcpkg, where it is going to be restored from cache, or create from scratch.
+          # vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+
+          # The Git commit id of vcpkg to be checked out. This is only needed because we are not using a submodule.
+          vcpkgGitCommitId: '1b2372fdd420185c6f516541b81228c55061dca4'
+
+          # The vcpkg.json file, which will be part of cache key computation.
+          #          vcpkgJsonGlob: '${{ github.workspace }}/vcpkg.json'
+
+          # don't run vcpkg install in the project, let run-cmake do it.
+          runVcpkgInstall: false
+
+      - name: Run CMake with vcpkg.json manifest - Windows
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ${{ matrix.presets }}
+          buildPreset: ${{ matrix.presets }}
+
+      - name: Save nightly build from main
+        uses: actions/upload-artifact@v4
+        if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
+        with:
+          name: nightly-${{ github.sha }}
+          path: |
+            cmake-build/${{matrix.presets}}/msimg32.dll
+
+      - name: Save build to release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          name: "Release ${{ github.ref_name }}"
+          files: cmake-build/${{matrix.presets}}/msimg32.dll
+          token: ${{ secrets.GITHUB_TOKEN }}
