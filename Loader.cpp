@@ -136,6 +136,8 @@ struct InspectionHandle
             return;
         }
 
+        SymSetOptions(SYMOPT_DEFERRED_LOADS);
+
         if (!SymInitialize(process, nullptr, false))
         {
             spdlog::critical("Could not initialize symbol handler: {}", GetLastErrorMessage());
