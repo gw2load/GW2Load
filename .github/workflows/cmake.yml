@@ -18,6 +18,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v5
 
@@ -60,6 +63,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           name: "Release ${{ github.ref_name }}"
+          generate_release_notes: true
           files: cmake-build/${{matrix.presets}}/msimg32.dll
           token: ${{ secrets.GITHUB_TOKEN }}
