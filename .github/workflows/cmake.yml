@@ -18,6 +18,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v5
 
@@ -32,7 +35,7 @@ jobs:
           # vcpkgDirectory: '${{ github.workspace }}/vcpkg'
 
           # The Git commit id of vcpkg to be checked out. This is only needed because we are not using a submodule.
-          vcpkgGitCommitId: '1b2372fdd420185c6f516541b81228c55061dca4'
+          vcpkgGitCommitId: '74e6536215718009aae747d86d84b78376bf9e09'
 
           # The vcpkg.json file, which will be part of cache key computation.
           #          vcpkgJsonGlob: '${{ github.workspace }}/vcpkg.json'
@@ -60,6 +63,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           name: "Release ${{ github.ref_name }}"
+          generate_release_notes: true
           files: cmake-build/${{matrix.presets}}/msimg32.dll
           token: ${{ secrets.GITHUB_TOKEN }}
