@@ -23,6 +23,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       # install cmake and ninja
       - uses: lukka/get-cmake@latest
