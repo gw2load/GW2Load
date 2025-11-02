@@ -27,21 +27,13 @@ jobs:
       # install cmake and ninja
       - uses: lukka/get-cmake@latest
 
+      # automatically detects the vcpkg commit from the vcpkg-configuration.json file
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         id: runvcpkg
         with:
           # This specifies the location of vcpkg, where it is going to be restored from cache, or create from scratch.
-          # vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-
-          # The Git commit id of vcpkg to be checked out. This is only needed because we are not using a submodule.
-          vcpkgGitCommitId: '74e6536215718009aae747d86d84b78376bf9e09'
-
-          # The vcpkg.json file, which will be part of cache key computation.
-          #          vcpkgJsonGlob: '${{ github.workspace }}/vcpkg.json'
-
-          # don't run vcpkg install in the project, let run-cmake do it.
-          runVcpkgInstall: false
+          vcpkgDirectory: '${{ runner.temp }}/vcpkg'
 
       - name: Run CMake with vcpkg.json manifest - Windows
         uses: lukka/run-cmake@v10
