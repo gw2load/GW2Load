@@ -63,11 +63,11 @@ public:
 const char* GetLastErrorMessage();
 
 template <>
-struct fmt::formatter<spdlog::level::level_enum> : formatter<std::string_view> {
+struct fmt::formatter<spdlog::level::level_enum> : formatter<fmt::string_view> {
     // parse is inherited from formatter<string_view>.
 
     auto format(spdlog::level::level_enum level, format_context& ctx) const {
         auto name = spdlog::level::to_string_view(level);
-        return formatter<std::string_view>::format(name, ctx);
+        return formatter<fmt::string_view>::format(name, ctx);
     }
 };
