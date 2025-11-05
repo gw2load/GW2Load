@@ -115,6 +115,36 @@ bool ValidateExecutable()
     return true;
 }
 
+std::optional<std::string> GetCurrentVersionStr(HMODULE pDll) noexcept {
+    wchar_t exeName[MAX_PATH];
+    GetModuleFileNameW(pDll, exeName, sizeof(exeName));
+    DWORD verHandle;
+    DWORD verSize = GetFileVersionInfoSizeW(exeName, &verHandle);
+    if (verSize == 0)
+        return std::nullopt;
+
+    std::vector<unsigned char> verData(verSize);
+    if (!GetFileVersionInfoW(exeName, verHandle, verSize, verData.data()))
+        return std::nullopt;
+
+    const LANGANDCODEPAGE* lpTranslate = nullptr;
+    const LANGANDCODEPAGE fallbackTranslate{ 0x0409, 0x04B0 };
+
+    UINT cbTranslate;
+    if (!VerQueryValueA(verData.data(), "\\VarFileInfo\\Translation", (void**)&lpTranslate, &cbTranslate))
+    {
+        lpTranslate = &fallbackTranslate;
+    }
+
+    unsigned int fileInfoSize;
+    char* fileInfoBuf;
+    const auto query = std::format("\\StringFileInfo\\{:04x}{:04x}\\ProductVersion", lpTranslate->wLanguage, lpTranslate->wCodePage);
+    if (!VerQueryValueA(verData.data(), query.c_str(), (void**)&fileInfoBuf, &fileInfoSize) || fileInfoSize == 0)
+        return std::nullopt;
+
+    return std::string(fileInfoBuf);
+}
+
 void Init()
 {
     PWSTR path;
@@ -163,7 +193,7 @@ void Init()
     if(!g_callWndProcHook)
         g_callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcHook, nullptr, GetCurrentThreadId());
 
-    spdlog::info("Initializing GW2Load...");
+    spdlog::info("Initializing GW2Load with version {} ...", GetCurrentVersionStr(g_LoaderModuleHandle).value_or("unknown"));
     Initialize(InitializationType::InLauncher, std::nullopt);
 }
 
