@@ -26,9 +26,9 @@
       "inherits": [
         "default"
       ],
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      },
+        "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        },
       "hidden": true
     },
     {

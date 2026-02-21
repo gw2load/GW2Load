@@ -14,6 +14,7 @@ project(GW2Load CXX)
 find_package(spdlog CONFIG REQUIRED)
 
 set(VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/VersionInfo.rc")
+enable_language(C ASM_MASM)
 
 # add custom target to regenerate version info on every build
 add_custom_target(VersionInfo ALL
@@ -80,11 +81,14 @@ target_sources(${PROJECT_NAME}
         Utils.cpp
         D3DHook_general.cpp
         D3DHook_vtables.cpp
+        D3DHook_trampolines.asm
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE Version.lib D3D11.lib Dbghelp.lib)
 
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ".")
+install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION "." OPTIONAL)
 
 # This creates an executable that can be used to test the Enumerate exports
 project(StandaloneTestApp CXX)

@@ -1,0 +1,37 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "debug-windows-copy",
+            "inherits": "debug-windows",
+            "installDir": "<non-Steam install path>",
+            "environment": {
+                "GW2_INSTALL_DIR": "<non-Steam install path>"
+            }
+        },
+        {
+            "name": "debug-windows-copy-steam",
+            "inherits": "debug-windows",
+            "installDir": "<Steam install path>",
+            "environment": {
+                "GW2_INSTALL_DIR": "<Steam install path>"
+            }
+        },
+        {
+            "name": "release-windows-copy",
+            "inherits": "release-windows",
+            "installDir": "<non-Steam install path>",
+            "environment": {
+                "GW2_INSTALL_DIR": "<non-Steam install path>"
+            }
+        },
+        {
+            "name": "release-windows-copy-steam",
+            "inherits": "release-windows",
+            "installDir": "<Steam install path>",
+            "environment": {
+                "GW2_INSTALL_DIR": "<Steam install path>"
+            }
+        }
+    ]
+}

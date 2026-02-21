@@ -6,13 +6,13 @@
 #include "Utils.h"
 
 void HookFunction(auto& function, const auto& hook, auto& backup)
-requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<std::add_pointer_t<decltype(hook)>>>
-	  && std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<decltype(backup)>>
+requires std::same_as< std::remove_cvref_t<decltype(hook)>, void()> &&
+std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<decltype(backup)>>
 {
 	DWORD oldProtect;
 	VirtualProtect(&function, sizeof(void*), PAGE_READWRITE, &oldProtect);
 	backup = function;
-	function = hook;
+	function = reinterpret_cast<decltype(function)>(hook);
 	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
 }
 
@@ -25,8 +25,9 @@ requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref
 	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
 }
 
+extern "C" void TrSwapChainPresent();
 decltype(IDXGISwapChainVtbl::Present) RealSwapChainPresent = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
+extern "C" HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
 	IDXGISwapChain* This,
 	UINT SyncInterval,
 	UINT Flags)
@@ -38,8 +39,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
 	return returnValue;
 }
 
+extern "C" void TrSwapChain1Present1();
 decltype(IDXGISwapChain1Vtbl::Present1) RealSwapChain1Present1 = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
+extern "C" HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
 	IDXGISwapChain1* This,
 	UINT SyncInterval,
 	UINT PresentFlags,
@@ -52,8 +54,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
 	return returnValue;
 }
 
+extern "C" void TrSwapChainResizeBuffers();
 decltype(IDXGISwapChainVtbl::ResizeBuffers) RealSwapChainResizeBuffers = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
+extern "C" HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
 	IDXGISwapChain* This,
 	UINT BufferCount,
 	UINT Width,
@@ -67,8 +70,9 @@ HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
 	return returnValue;
 }
 
+extern "C" void TrSwapChain3ResizeBuffers1();
 decltype(IDXGISwapChain3Vtbl::ResizeBuffers1) RealSwapChain3ResizeBuffers1 = nullptr;
-HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
+extern "C" HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
 	IDXGISwapChain3* This,
 	UINT BufferCount,
 	UINT Width,
@@ -100,8 +104,8 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 	if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChainVT)) == g_SwapChainTables.end())
 	{
 		spdlog::debug("SwapChain vtable is new: hooking!");
-		HookFunction(swapChainVT->Present, HkSwapChainPresent, RealSwapChainPresent);
-		HookFunction(swapChainVT->ResizeBuffers, HkSwapChainResizeBuffers, RealSwapChainResizeBuffers);
+		HookFunction(swapChainVT->Present, TrSwapChainPresent, RealSwapChainPresent);
+		HookFunction(swapChainVT->ResizeBuffers, TrSwapChainResizeBuffers, RealSwapChainResizeBuffers);
 
 		g_SwapChainTables.push_back(swapChainVT);
 
@@ -113,7 +117,7 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain1VT)) == g_SwapChainTables.end())
 			{
 				spdlog::debug("SwapChain1 vtable is new: hooking!");
-				HookFunction(swapChain1VT->Present1, HkSwapChain1Present1, RealSwapChain1Present1);
+				HookFunction(swapChain1VT->Present1, TrSwapChain1Present1, RealSwapChain1Present1);
 				swapChain1VT->Release(sc1);
 
 				g_SwapChainTables.push_back(swapChain1VT);
@@ -128,7 +132,7 @@ void OverwriteVTables(void* sc, void* dev, void* ctx)
 			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain3VT)) == g_SwapChainTables.end())
 			{
 				spdlog::debug("SwapChain3 vtable is new: hooking!");
-				HookFunction(swapChain3VT->ResizeBuffers1, HkSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
+				HookFunction(swapChain3VT->ResizeBuffers1, TrSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
 				swapChain3VT->Release(sc3);
 
 				g_SwapChainTables.push_back(swapChain3VT);

@@ -5,3 +5,4 @@ vcpkg_installed
 version.h
 Version.aps
 cmake-build
+CMakeUserPresets.json
