@@ -880,11 +880,11 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
     case InitializationType::InLauncher:
         EnumerateAddons("addons", std::regex(".*\\.dll"));
         InitializeAddons(true);
+        InitializeD3DHook();
         break;
     case InitializationType::BeforeFirstWindow:
         break;
     case InitializationType::BeforeGameWindow:
-        InitializeD3DHook(*hwnd);
         break;
     }
 }

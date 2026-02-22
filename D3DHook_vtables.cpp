@@ -5,167 +5,256 @@
 #include <variant>
 #include "Utils.h"
 
-void HookFunction(auto& function, const auto& hook, auto& backup)
-requires std::same_as< std::remove_cvref_t<decltype(hook)>, void()> &&
-std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<decltype(backup)>>
-{
+namespace {
+
+std::unordered_map<void*, std::function<void()>> g_OverwrittenVTableEntries;
+
+template<typename T, typename F>
+concept HookType = std::same_as<std::remove_cvref_t<F>, std::remove_cvref_t<std::add_pointer_t<decltype(T::Hook)>>>
+&& std::same_as<std::remove_cvref_t<F>, std::remove_cvref_t<decltype(T::Real)>>;
+
+
+template<typename T, typename F> requires HookType<T, F>
+void HookFunction(F& function) {
+	void* functionPtr = static_cast<void*>(&function);
+
+	if(g_OverwrittenVTableEntries.contains(functionPtr))
+		return;
+
 	DWORD oldProtect;
-	VirtualProtect(&function, sizeof(void*), PAGE_READWRITE, &oldProtect);
-	backup = function;
-	function = reinterpret_cast<decltype(function)>(hook);
-	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
+	VirtualProtect(functionPtr, sizeof(void*), PAGE_READWRITE, &oldProtect);
+	T::Real = function;
+	function = T::Hook;
+	VirtualProtect(functionPtr, sizeof(void*), oldProtect, &oldProtect);
+
+	g_OverwrittenVTableEntries[functionPtr] = [&function, functionPtr] {
+		DWORD oldProtect;
+		VirtualProtect(functionPtr, sizeof(void*), PAGE_READWRITE, &oldProtect);
+		function = T::Real;
+		VirtualProtect(functionPtr, sizeof(void*), oldProtect, &oldProtect);
+	};
 }
 
-void UnhookFunction(auto& function, auto& backup)
-requires std::same_as<std::remove_cvref_t<decltype(function)>, std::remove_cvref_t<decltype(backup)>>
-{
-	DWORD oldProtect;
-	VirtualProtect(&function, sizeof(void*), PAGE_READWRITE, &oldProtect);
-	function = backup;
-	VirtualProtect(&function, sizeof(void*), oldProtect, &oldProtect);
 }
 
-extern "C" void TrSwapChainPresent();
-decltype(IDXGISwapChainVtbl::Present) RealSwapChainPresent = nullptr;
-extern "C" HRESULT STDMETHODCALLTYPE HkSwapChainPresent(
-	IDXGISwapChain* This,
-	UINT SyncInterval,
-	UINT Flags)
-{
-	InitializeD3DObjects(This);
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(This);
-	auto returnValue = RealSwapChainPresent(This, SyncInterval, Flags);
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(This);
-	return returnValue;
-}
-
-extern "C" void TrSwapChain1Present1();
-decltype(IDXGISwapChain1Vtbl::Present1) RealSwapChain1Present1 = nullptr;
-extern "C" HRESULT STDMETHODCALLTYPE HkSwapChain1Present1(
-	IDXGISwapChain1* This,
-	UINT SyncInterval,
-	UINT PresentFlags,
-	const DXGI_PRESENT_PARAMETERS* pPresentParameters)
-{
-	InitializeD3DObjects(reinterpret_cast<IDXGISwapChain*>(This));
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(Downcast(This));
-	auto returnValue = RealSwapChain1Present1(This, SyncInterval, PresentFlags, pPresentParameters);
-	InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(Downcast(This));
-	return returnValue;
-}
-
-extern "C" void TrSwapChainResizeBuffers();
-decltype(IDXGISwapChainVtbl::ResizeBuffers) RealSwapChainResizeBuffers = nullptr;
-extern "C" HRESULT STDMETHODCALLTYPE HkSwapChainResizeBuffers(
-	IDXGISwapChain* This,
-	UINT BufferCount,
-	UINT Width,
-	UINT Height,
-	DXGI_FORMAT NewFormat,
-	UINT SwapChainFlags)
-{
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall, GW2Load_ResizeBuffersCallback>(This, Width, Height, NewFormat);
-	auto returnValue = RealSwapChainResizeBuffers(This, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall, GW2Load_ResizeBuffersCallback>(This, Width, Height, NewFormat);
-	return returnValue;
-}
-
-extern "C" void TrSwapChain3ResizeBuffers1();
-decltype(IDXGISwapChain3Vtbl::ResizeBuffers1) RealSwapChain3ResizeBuffers1 = nullptr;
-extern "C" HRESULT STDMETHODCALLTYPE HkSwapChain3ResizeBuffers1(
-	IDXGISwapChain3* This,
-	UINT BufferCount,
-	UINT Width,
-	UINT Height,
-	DXGI_FORMAT Format,
-	UINT SwapChainFlags,
-	const UINT* pCreationNodeMask,
-	IUnknown* const* ppPresentQueue)
-{
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, Format);
-	auto returnValue = RealSwapChain3ResizeBuffers1(This, BufferCount, Width, Height, Format, SwapChainFlags, pCreationNodeMask, ppPresentQueue);
-	InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, Format);
-	return returnValue;
-}
-
-using SwapChainVirtualTable = std::variant<IDXGISwapChainVtbl*, IDXGISwapChain1Vtbl*, IDXGISwapChain3Vtbl*>;
-std::vector<SwapChainVirtualTable> g_SwapChainTables;
-//std::vector<ID3D11DeviceVtbl*> g_DeviceTables;
-//std::vector<ID3D11DeviceContextVtbl*> g_DeviceContextTables;
-
-void OverwriteVTables(void* sc, void* dev, void* ctx)
-{
-	spdlog::debug("Attempting to overwrite vtables...");
-
-	auto* swapChainVT = reinterpret_cast<IDXGISwapChain*>(sc)->lpVtbl;
-	auto* deviceVT = reinterpret_cast<ID3D11Device*>(dev)->lpVtbl;
-	auto* contextVT = reinterpret_cast<ID3D11DeviceContext*>(ctx)->lpVtbl;
-
-	if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChainVT)) == g_SwapChainTables.end())
-	{
-		spdlog::debug("SwapChain vtable is new: hooking!");
-		HookFunction(swapChainVT->Present, TrSwapChainPresent, RealSwapChainPresent);
-		HookFunction(swapChainVT->ResizeBuffers, TrSwapChainResizeBuffers, RealSwapChainResizeBuffers);
-
-		g_SwapChainTables.push_back(swapChainVT);
-
-		auto* sc1 = GetSwapChain1(reinterpret_cast<IDXGISwapChain*>(sc));
-		if (sc1)
-		{
-			spdlog::debug("SwapChain1 is available, checking...");
-			auto* swapChain1VT = sc1->lpVtbl;
-			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain1VT)) == g_SwapChainTables.end())
-			{
-				spdlog::debug("SwapChain1 vtable is new: hooking!");
-				HookFunction(swapChain1VT->Present1, TrSwapChain1Present1, RealSwapChain1Present1);
-				swapChain1VT->Release(sc1);
-
-				g_SwapChainTables.push_back(swapChain1VT);
-			}
-		}
-
-		auto* sc3 = GetSwapChain3(reinterpret_cast<IDXGISwapChain*>(sc));
-		if (sc3)
-		{
-			spdlog::debug("SwapChain3 is available, checking...");
-			auto* swapChain3VT = sc3->lpVtbl;
-			if (std::ranges::find(g_SwapChainTables, SwapChainVirtualTable(swapChain3VT)) == g_SwapChainTables.end())
-			{
-				spdlog::debug("SwapChain3 vtable is new: hooking!");
-				HookFunction(swapChain3VT->ResizeBuffers1, TrSwapChain3ResizeBuffers1, RealSwapChain3ResizeBuffers1);
-				swapChain3VT->Release(sc3);
-
-				g_SwapChainTables.push_back(swapChain3VT);
-			}
-		}
-
+template<typename T>
+struct HkSwapChainPresent {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::Present) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		UINT SyncInterval,
+		UINT Flags) {
+		InitializeD3DObjects(Downcast(This));
+		InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(Downcast(This));
+		auto returnValue = Real(This, SyncInterval, Flags);
+		InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(Downcast(This));
+		return returnValue;
 	}
+};
+
+template<typename T>
+struct HkSwapChainPresent1 {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::Present1) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		UINT SyncInterval,
+		UINT PresentFlags,
+		const DXGI_PRESENT_PARAMETERS* pPresentParameters) {
+		InitializeD3DObjects(Downcast(This));
+		InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::BeforeCall, GW2Load_PresentCallback>(Downcast(This));
+		auto returnValue = Real(This, SyncInterval, PresentFlags, pPresentParameters);
+		InvokeAPIHooks<GW2Load_HookedFunction::Present, GW2Load_CallbackPoint::AfterCall, GW2Load_PresentCallback>(Downcast(This));
+		return returnValue;
+	}
+};
+
+template<typename T>
+struct HkSwapChainResizeBuffers {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::ResizeBuffers) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		UINT BufferCount,
+		UINT Width,
+		UINT Height,
+		DXGI_FORMAT NewFormat,
+		UINT SwapChainFlags) {
+		InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, NewFormat);
+		auto returnValue = Real(This, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+		InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, NewFormat);
+		return returnValue;
+	}
+};
+
+template<typename T>
+struct HkSwapChainResizeBuffers1 {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::ResizeBuffers1) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		UINT BufferCount,
+		UINT Width,
+		UINT Height,
+		DXGI_FORMAT Format,
+		UINT SwapChainFlags,
+		const UINT* pCreationNodeMask,
+		IUnknown* const* ppPresentQueue) {
+		InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::BeforeCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, Format);
+		auto returnValue = Real(This, BufferCount, Width, Height, Format, SwapChainFlags, pCreationNodeMask, ppPresentQueue);
+		InvokeAPIHooks<GW2Load_HookedFunction::ResizeBuffers, GW2Load_CallbackPoint::AfterCall, GW2Load_ResizeBuffersCallback>(Downcast(This), Width, Height, Format);
+		return returnValue;
+	}
+};
+
+
+void OverwriteSwapChainVTables(void* baseSC_) {
+	spdlog::debug("Attempting to overwrite SwapChain vtables...");
+	IDXGISwapChain* baseSC = static_cast<IDXGISwapChain*>(baseSC_);
+	auto* baseVT = baseSC->lpVtbl;
+
+	auto forEachVT = [&]<typename T>() {
+		constexpr bool NeedsQuerying = !std::same_as<T, IDXGISwapChain>;
+		T* sc = NeedsQuerying ? nullptr : reinterpret_cast<T*>(baseSC);
+		if(!NeedsQuerying || SUCCEEDED(baseVT->QueryInterface(baseSC, GetUUIDOf<T>(), reinterpret_cast<void**>(&sc)))) {
+			auto* vt = sc->lpVtbl;
+
+			HookFunction<HkSwapChainPresent<T>>(vt->Present);
+			HookFunction<HkSwapChainResizeBuffers<T>>(vt->ResizeBuffers);
+
+			if constexpr(requires() { vt->Present1; })
+				HookFunction<HkSwapChainPresent1<T>>(vt->Present1);
+			if constexpr(requires() { vt->ResizeBuffers1; })
+				HookFunction<HkSwapChainResizeBuffers1<T>>(vt->ResizeBuffers1);
+
+			// Don't release object being returned by the factory!
+			if(NeedsQuerying)
+				vt->Release(sc);
+		}
+	};
+
+	forEachVT.operator()<IDXGISwapChain>();
+	forEachVT.operator()<IDXGISwapChain1>();
+	forEachVT.operator()<IDXGISwapChain2>();
+	forEachVT.operator()<IDXGISwapChain3>();
+	forEachVT.operator()<IDXGISwapChain4>();
+}
+
+template<typename T>
+struct HkFactoryCreateSwapChain {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::CreateSwapChain) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		IUnknown* pDevice,
+		DXGI_SWAP_CHAIN_DESC* pDesc,
+		IDXGISwapChain** ppSwapChain) {
+		auto returnValue = Real(This, pDevice, pDesc, ppSwapChain);
+		if(SUCCEEDED(returnValue))
+			OverwriteSwapChainVTables(*ppSwapChain);
+		return returnValue;
+	}
+};
+
+template<typename T>
+struct HkFactoryCreateSwapChainForComposition {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::CreateSwapChainForComposition) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		IUnknown* pDevice,
+		const DXGI_SWAP_CHAIN_DESC1* pDesc,
+		IDXGIOutput* pRestrictToOutput,
+		IDXGISwapChain1** ppSwapChain) {
+		auto returnValue = Real(This, pDevice, pDesc, pRestrictToOutput, ppSwapChain);
+		if(SUCCEEDED(returnValue))
+			OverwriteSwapChainVTables(*ppSwapChain);
+		return returnValue;
+	}
+};
+
+template<typename T>
+struct HkFactoryCreateSwapChainForCoreWindow {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::CreateSwapChainForCoreWindow) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		IUnknown* pDevice,
+		IUnknown* pWindow,
+		const DXGI_SWAP_CHAIN_DESC1* pDesc,
+		IDXGIOutput* pRestrictToOutput,
+		IDXGISwapChain1** ppSwapChain) {
+		auto returnValue = Real(This, pDevice, pWindow, pDesc, pRestrictToOutput, ppSwapChain);
+		if(SUCCEEDED(returnValue))
+			OverwriteSwapChainVTables(*ppSwapChain);
+		return returnValue;
+	}
+};
+
+template<typename T>
+struct HkFactoryCreateSwapChainForHwnd {
+	using VTable = std::remove_pointer_t<std::remove_cvref_t<decltype(T::lpVtbl)>>;
+	inline static decltype(VTable::CreateSwapChainForHwnd) Real = nullptr;
+	static HRESULT STDMETHODCALLTYPE Hook(
+		T* This,
+		IUnknown* pDevice,
+		HWND hWnd,
+		const DXGI_SWAP_CHAIN_DESC1* pDesc,
+		const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
+		IDXGIOutput* pRestrictToOutput,
+		IDXGISwapChain1** ppSwapChain) {
+		auto returnValue = Real(This, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
+		if(SUCCEEDED(returnValue))
+			OverwriteSwapChainVTables(*ppSwapChain);
+		return returnValue;
+	}
+};
+
+void OverwriteFactoryVTables(void* baseF_) {
+	spdlog::debug("Attempting to overwrite DXGIFactory vtables...");
+	IDXGIFactory* baseF = static_cast<IDXGIFactory*>(baseF_);
+	auto* baseVT = baseF->lpVtbl;
+
+	auto forEachVT = [&]<typename T>() {
+		constexpr bool NeedsQuerying = !std::same_as<T, IDXGIFactory>;
+		T* f = NeedsQuerying ? nullptr : reinterpret_cast<T*>(baseF);
+		if(!NeedsQuerying || SUCCEEDED(baseVT->QueryInterface(baseF, GetUUIDOf<T>(), reinterpret_cast<void**>(&f)))) {
+			auto* vt = f->lpVtbl;
+
+			spdlog::debug("DXGIFactory vtable is new: hooking!");
+			HookFunction<HkFactoryCreateSwapChain<T>>(vt->CreateSwapChain);
+
+			if constexpr(requires() { vt->CreateSwapChainForComposition; })
+				HookFunction<HkFactoryCreateSwapChainForComposition<T>>(vt->CreateSwapChainForComposition);
+			if constexpr(requires() { vt->CreateSwapChainForCoreWindow; })
+				HookFunction<HkFactoryCreateSwapChainForCoreWindow<T>>(vt->CreateSwapChainForCoreWindow);
+			if constexpr(requires() { vt->CreateSwapChainForHwnd; })
+				HookFunction<HkFactoryCreateSwapChainForHwnd<T>>(vt->CreateSwapChainForHwnd);
+
+			// Don't release object being returned by the factory!
+			if(NeedsQuerying)
+				vt->Release(f);
+		}
+	};
+
+	forEachVT.operator()<IDXGIFactory>();
+	forEachVT.operator()<IDXGIFactory1>();
+	forEachVT.operator()<IDXGIFactory2>();
+	forEachVT.operator()<IDXGIFactory3>();
+	forEachVT.operator()<IDXGIFactory4>();
+	forEachVT.operator()<IDXGIFactory5>();
+	forEachVT.operator()<IDXGIFactory6>();
+	forEachVT.operator()<IDXGIFactory7>();
 }
 
 void RestoreVTables()
 {
 	spdlog::debug("Restoring all vtables...");
 
-	for (auto& vt : g_SwapChainTables)
+	for (auto& u : g_OverwrittenVTableEntries | std::views::values)
 	{
-		if (auto* p = std::get_if<IDXGISwapChainVtbl*>(&vt); p)
-		{
-			auto* swapChainVT = *p;
-			UnhookFunction(swapChainVT->Present, RealSwapChainPresent);
-			UnhookFunction(swapChainVT->ResizeBuffers, RealSwapChainResizeBuffers);
-		}
-
-		if (auto* p = std::get_if<IDXGISwapChain1Vtbl*>(&vt); p)
-		{
-			auto* swapChain1VT = *p;
-			UnhookFunction(swapChain1VT->Present1, RealSwapChain1Present1);
-		}
-
-		if (auto* p = std::get_if<IDXGISwapChain3Vtbl*>(&vt); p)
-		{
-			auto* swapChain3VT = *p;
-			UnhookFunction(swapChain3VT->ResizeBuffers1, RealSwapChain3ResizeBuffers1);
-		}
+		u();
 	}
-	g_SwapChainTables.clear();
+	g_OverwrittenVTableEntries.clear();
 }

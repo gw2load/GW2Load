@@ -3,6 +3,6 @@
   "name": "gw2load",
   "version-string": "0.0.1",
   "dependencies": [
-    "spdlog"
+    "spdlog", "minhook"
   ]
 }

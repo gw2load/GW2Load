@@ -8,45 +8,28 @@
 
 using namespace Microsoft::WRL;
 
-std::unordered_set<HWND> g_D3DKnownHWNDs;
-
-bool InitializeD3DHook(HWND hWnd)
+bool InitializeD3DHook()
 {
-	spdlog::debug("Attempting to initialize D3D hook for window {}.", reinterpret_cast<void*>(hWnd));
+	static bool initialized = false;
 
-	if (g_D3DKnownHWNDs.contains(hWnd))
+	spdlog::debug("Attempting to initialize D3D hook.");
+
+	if (initialized)
 	{
-		spdlog::debug("Skipping window {} because it was already hooked.", reinterpret_cast<void*>(hWnd));
+		spdlog::debug("D3D hook already initialized!");
 		return false;
 	}
 
-	g_D3DKnownHWNDs.insert(hWnd);
-
-	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-	DXGI_SWAP_CHAIN_DESC swapChainDesc;
-	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
-	swapChainDesc.BufferCount = 1;
-	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	swapChainDesc.OutputWindow = hWnd;
-	swapChainDesc.SampleDesc.Count = 1;
-	swapChainDesc.Windowed = (GetWindowLong(hWnd, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
-	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-	ComPtr<IDXGISwapChain> tempSwapChain;
-	ComPtr<ID3D11Device> tempDevice;
-	ComPtr<ID3D11DeviceContext> tempContext;
-
-	if (auto hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &tempSwapChain, &tempDevice, NULL, &tempContext); FAILED(hr))
+	ComPtr<IDXGIFactory> factory;
+	if(auto hr = CreateDXGIFactory(IID_PPV_ARGS(&factory)); FAILED(hr))
 	{
-		spdlog::error("Failed to hook window {} due to failed D3D11CreateDeviceAndSwapChain: error code {:x}.", reinterpret_cast<void*>(hWnd), hr);
+		spdlog::error("Could not create DXGIFactory!");
 		return false;
 	}
 
-	OverwriteVTables(tempSwapChain.Get(), tempDevice.Get(), tempContext.Get());
+	OverwriteFactoryVTables(factory.Get());
 
+	initialized = true;
 	return true;
 }
 
@@ -116,30 +99,37 @@ void ShutdownD3DObjects(HWND hWnd)
 	RestoreVTables();
 }
 
-IDXGISwapChain1* GetSwapChain1(IDXGISwapChain* sc)
-{
-	IDXGISwapChain1* sc1 = nullptr;
-	if (SUCCEEDED(sc->QueryInterface(&sc1)))
-		return sc1;
-	else
-		return nullptr;
-}
+IDXGISwapChain* Downcast(IDXGISwapChain* swc) { return swc; }
+IDXGISwapChain* Downcast(IDXGISwapChain1* swc) { return swc; }
+IDXGISwapChain* Downcast(IDXGISwapChain2* swc) { return swc; }
+IDXGISwapChain* Downcast(IDXGISwapChain3* swc) { return swc; }
+IDXGISwapChain* Downcast(IDXGISwapChain4* swc) { return swc; }
 
-IDXGISwapChain3* GetSwapChain3(IDXGISwapChain* sc)
-{
-	IDXGISwapChain3* sc3 = nullptr;
-	if (SUCCEEDED(sc->QueryInterface(&sc3)))
-		return sc3;
-	else
-		return nullptr;
-}
+IDXGIFactory* Downcast(IDXGIFactory* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory1* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory2* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory3* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory4* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory5* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory6* f) { return f; }
+IDXGIFactory* Downcast(IDXGIFactory7* f) { return f; }
 
-IDXGISwapChain* Downcast(IDXGISwapChain1* swc)
-{
-	return swc;
-}
+#define MAKE_UUID_GETTER(Type) \
+	template<> REFIID GetUUIDOf<Type>() { return __uuidof(Type); }
 
-IDXGISwapChain* Downcast(IDXGISwapChain3* swc)
-{
-	return swc;
-}
+MAKE_UUID_GETTER(IDXGISwapChain);
+MAKE_UUID_GETTER(IDXGISwapChain1);
+MAKE_UUID_GETTER(IDXGISwapChain2);
+MAKE_UUID_GETTER(IDXGISwapChain3);
+MAKE_UUID_GETTER(IDXGISwapChain4);
+
+MAKE_UUID_GETTER(IDXGIFactory);
+MAKE_UUID_GETTER(IDXGIFactory1);
+MAKE_UUID_GETTER(IDXGIFactory2);
+MAKE_UUID_GETTER(IDXGIFactory3);
+MAKE_UUID_GETTER(IDXGIFactory4);
+MAKE_UUID_GETTER(IDXGIFactory5);
+MAKE_UUID_GETTER(IDXGIFactory6);
+MAKE_UUID_GETTER(IDXGIFactory7);
+
+#undef MAKE_UUID_GETTER

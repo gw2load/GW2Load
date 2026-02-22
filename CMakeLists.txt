@@ -12,6 +12,7 @@ list(APPEND VCPKG_OVERLAY_TRIPLETS "${my-vcpkg-triplets_SOURCE_DIR}")
 project(GW2Load CXX)
 
 find_package(spdlog CONFIG REQUIRED)
+find_package(minhook CONFIG REQUIRED)
 
 set(VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/VersionInfo.rc")
 enable_language(C ASM_MASM)
@@ -80,12 +81,12 @@ target_sources(${PROJECT_NAME}
         Loader.cpp
         Utils.cpp
         D3DHook_general.cpp
+        D3DHook_detours.cpp
         D3DHook_vtables.cpp
-        D3DHook_trampolines.asm
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
-target_link_libraries(${PROJECT_NAME} PRIVATE Version.lib D3D11.lib Dbghelp.lib)
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog minhook::minhook)
+target_link_libraries(${PROJECT_NAME} PRIVATE Version.lib D3D11.lib Dbghelp.lib dxgi.lib)
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ".")
 install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION "." OPTIONAL)
