@@ -108,8 +108,11 @@ struct HkSwapChainResizeBuffers1 {
 	}
 };
 
-
 void OverwriteSwapChainVTables(void* baseSC_) {
+	static bool hooked = false;
+	if(hooked)
+		return;
+
 	spdlog::debug("Attempting to overwrite SwapChain vtables...");
 	IDXGISwapChain* baseSC = static_cast<IDXGISwapChain*>(baseSC_);
 	auto* baseVT = baseSC->lpVtbl;
@@ -139,6 +142,7 @@ void OverwriteSwapChainVTables(void* baseSC_) {
 	forEachVT.operator()<IDXGISwapChain2>();
 	forEachVT.operator()<IDXGISwapChain3>();
 	forEachVT.operator()<IDXGISwapChain4>();
+	hooked = true;
 }
 
 template<typename T>
@@ -212,6 +216,10 @@ struct HkFactoryCreateSwapChainForHwnd {
 };
 
 void OverwriteFactoryVTables(void* baseF_) {
+	static bool hooked = false;
+	if(hooked)
+		return;
+
 	spdlog::debug("Attempting to overwrite DXGIFactory vtables...");
 	IDXGIFactory* baseF = static_cast<IDXGIFactory*>(baseF_);
 	auto* baseVT = baseF->lpVtbl;
@@ -246,6 +254,7 @@ void OverwriteFactoryVTables(void* baseF_) {
 	forEachVT.operator()<IDXGIFactory5>();
 	forEachVT.operator()<IDXGIFactory6>();
 	forEachVT.operator()<IDXGIFactory7>();
+	hooked = true;
 }
 
 void RestoreVTables()
