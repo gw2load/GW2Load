@@ -35,6 +35,22 @@ void HookFunction(F& function) {
 	};
 }
 
+void HoldModuleReference(void* address) {
+	if(g_OverwrittenVTableEntries.contains(address))
+		return;
+
+	HMODULE module;
+	if(SUCCEEDED(GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, static_cast<LPCSTR>(address), &module))) {
+		HMODULE dxgiModule = LoadLibraryA("dxgi.dll");
+		HMODULE d3d11Module = LoadLibraryA("d3d11.dll");
+		g_OverwrittenVTableEntries[address] = [module, dxgiModule, d3d11Module] {
+			FreeLibrary(module);
+			FreeLibrary(dxgiModule);
+			FreeLibrary(d3d11Module);
+		};
+	}
+}
+
 }
 
 template<typename T>
@@ -116,6 +132,8 @@ void OverwriteSwapChainVTables(void* baseSC_) {
 	spdlog::debug("Attempting to overwrite SwapChain vtables...");
 	IDXGISwapChain* baseSC = static_cast<IDXGISwapChain*>(baseSC_);
 	auto* baseVT = baseSC->lpVtbl;
+
+	HoldModuleReference(baseVT);
 
 	auto forEachVT = [&]<typename T>() {
 		constexpr bool NeedsQuerying = !std::same_as<T, IDXGISwapChain>;
@@ -223,6 +241,8 @@ void OverwriteFactoryVTables(void* baseF_) {
 	spdlog::debug("Attempting to overwrite DXGIFactory vtables...");
 	IDXGIFactory* baseF = static_cast<IDXGIFactory*>(baseF_);
 	auto* baseVT = baseF->lpVtbl;
+
+	HoldModuleReference(baseVT);
 
 	auto forEachVT = [&]<typename T>() {
 		constexpr bool NeedsQuerying = !std::same_as<T, IDXGIFactory>;
