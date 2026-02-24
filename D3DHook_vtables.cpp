@@ -126,7 +126,7 @@ struct HkSwapChainResizeBuffers1 {
 
 void OverwriteSwapChainVTables(void* baseSC_) {
 	static bool hooked = false;
-	if(hooked)
+	if(hooked || !AssociatedWithGameWindow(baseSC_))
 		return;
 
 	spdlog::debug("Attempting to overwrite SwapChain vtables...");

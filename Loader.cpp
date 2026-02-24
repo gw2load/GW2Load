@@ -10,6 +10,7 @@
 
 bool g_Quit = false;
 std::unordered_map<CallbackIndex, CallbackElement> g_Callbacks;
+HWND g_GameWindow = nullptr;
 
 template<>
 struct fmt::formatter<GW2Load_HookedFunction> : fmt::formatter<std::string_view> {
@@ -885,6 +886,7 @@ void Initialize(InitializationType type, std::optional<HWND> hwnd)
     case InitializationType::BeforeFirstWindow:
         break;
     case InitializationType::BeforeGameWindow:
+        g_GameWindow = *hwnd;
         break;
     }
 }

@@ -16,3 +16,4 @@ void LauncherClosing(HWND hwnd);
 
 extern std::shared_ptr<spdlog::logger> g_AddonLogger;
 extern HMODULE g_LoaderModuleHandle;
+extern HWND g_GameWindow;

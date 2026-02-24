@@ -13,6 +13,7 @@ void OverwriteSwapChainVTables(void* sc);
 void OverwriteFactoryVTables(void* dxgiFactory);
 void HookDXGIFactories();
 void RestoreVTables();
+bool AssociatedWithGameWindow(void* sc);
 
 template<typename T>
 REFIID GetUUIDOf();

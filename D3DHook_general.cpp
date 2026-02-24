@@ -99,6 +99,15 @@ void ShutdownD3DObjects(HWND hWnd)
 	RestoreVTables();
 }
 
+bool AssociatedWithGameWindow(void* sc_) {
+	auto* sc = static_cast<IDXGISwapChain*>(sc_);
+
+	DXGI_SWAP_CHAIN_DESC desc;
+	sc->GetDesc(&desc);
+
+	return desc.OutputWindow != nullptr && desc.OutputWindow == g_GameWindow;
+}
+
 IDXGISwapChain* Downcast(IDXGISwapChain* swc) { return swc; }
 IDXGISwapChain* Downcast(IDXGISwapChain1* swc) { return swc; }
 IDXGISwapChain* Downcast(IDXGISwapChain2* swc) { return swc; }
