@@ -286,7 +286,7 @@ std::optional<AddonData> InspectAddon(const std::filesystem::path& path, Inspect
     }
 }
 
-void EnumerateAddons(const std::filesystem::path& addonsPath, const std::regex& regex)
+void EnumerateAddons(const std::filesystem::path& addonsPath, const std::regex& regex, int maxDepth = 2)
 {
     spdlog::debug("Enumerating addons in '{}'...", addonsPath.string());
     InspectionHandle handle;
@@ -303,19 +303,25 @@ void EnumerateAddons(const std::filesystem::path& addonsPath, const std::regex& 
         return;
     }
 
-    auto recurse = [regex, &handle](this auto const& self, const std::filesystem::path& basePath) -> void {
+    auto recurse = [regex, &handle, maxDepth](this auto const& self, const std::filesystem::path& basePath, int depth) -> void {
         for (const auto& entry : std::filesystem::directory_iterator{ basePath, std::filesystem::directory_options::follow_directory_symlink })
         {
             if (entry.is_directory())
             {
                 auto dirName = entry.path().filename().string();
+                if (depth >= maxDepth)
+                {
+                    spdlog::debug("Skipping directory '{}' because max depth reached.", dirName);
+                    continue;
+                }
+
                 if (dirName.starts_with(".") || dirName.starts_with("_"))
                 {
                     spdlog::debug("Skipping directory '{}'.", dirName);
                     continue;
                 }
 
-                self(entry.path());
+                self(entry.path(), depth + 1);
             }
             else
             {
@@ -347,7 +353,7 @@ void EnumerateAddons(const std::filesystem::path& addonsPath, const std::regex& 
         }
     };
 
-    recurse(addonsPath);
+    recurse(addonsPath, 0);
 }
 
 std::vector<GW2Load_EnumeratedAddon> g_EnumeratedAddons;
