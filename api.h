@@ -4,6 +4,7 @@
 #include <string_view>
 #endif
 #include <windows.h>
+#include <d3d11.h>
 
 /*
 * This library is free software; you can redistribute it and/or

@@ -15,7 +15,6 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(minhook CONFIG REQUIRED)
 
 set(VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/VersionInfo.rc")
-enable_language(C ASM_MASM)
 
 # add custom target to regenerate version info on every build
 add_custom_target(VersionInfo ALL
@@ -37,6 +36,7 @@ add_custom_target(VersionInfo ALL
 
 add_library(${PROJECT_NAME} SHARED)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+
 add_dependencies(${PROJECT_NAME} VersionInfo)
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
