@@ -2,6 +2,9 @@
 
 #ifdef __cplusplus
 #include <string_view>
+#ifdef __cpp_lib_format
+#include <format>
+#endif
 #endif
 #include <windows.h>
 #include <d3d11.h>
@@ -186,12 +189,23 @@ struct GW2Load_API
     {
         log(level, message, messageSize);
     }
+#ifdef __cpp_lib_string_view
     auto Log(GW2Load_LogLevel level, std::string_view message)
     {
         log(level, message.data(), message.size());
     }
+#endif
+#ifdef __cpp_lib_format
+    template<typename... Args>
+    auto Log(GW2Load_LogLevel level, std::format_string<Args...> fmt, Args&&... args)
+    {
+        Log(level, std::format(fmt, std::forward<Args>(args)...));
+    }
+#endif
+
 protected:
 #endif
+
     GW2Load_RegisterCallbackFunc registerCallback;
     GW2Load_DeregisterCallbackFunc deregisterCallback;
     GW2Load_LogFunc log;
